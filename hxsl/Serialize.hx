@@ -266,10 +266,10 @@ class Serialize
 		var numVars = s.unserialize();
 		var allVars = [];
 		for ( i in 0...numVars ) {
-			var uid:Int = i;
-			var refuid:Int = s.unserialize();
+			var id:Int = i;
+			var refId:Int = s.unserialize();
 			var index = 0;
-			if ( refuid != 0 ) {
+			if ( refId != 0 ) {
 				index = s.unserialize();
 			}
 			var type = unserializeVarType(s);
@@ -282,8 +282,8 @@ class Serialize
 
 			var v:Variable = {
 				name:name,
-				uid:uid,
-				refuid:refuid-1,
+				id:id,
+				refId:refId-1,
 				index:index,
 				type:type,
 				kind:kind,
@@ -293,27 +293,14 @@ class Serialize
 				write:0,
 				assign:null
 			};
-			varmap.set(uid, v);
+			varmap.set(id, v);
 			allVars.push(v);
-		}
-
-		var numInputs:Int = s.unserialize();
-		var inputs = [];
-		for ( i in 0...numInputs ) {
-			inputs.push( varmap.get(s.unserialize()) );
-		}
-
-		var cv:Array<Int> = s.unserialize();
-		var compileVars = new Hash<Variable>();
-		for ( c in cv ) {
-			var v = varmap.get(c);
-			compileVars.set(v.name, v);
 		}
 
 		var vertex = unserializeCode(varmap, s, true);
 		var fragment = unserializeCode(varmap, s, false);
 
-		return { input:inputs, allVars : allVars, compileVars:compileVars, vertex:vertex, fragment:fragment };
+		return { vars : allVars, vertex:vertex, fragment:fragment };
 	}
 
 	static function unserializeCode( varmap:IntHash<Variable>, s:haxe.Unserializer, vertex:Bool ) : Code {
