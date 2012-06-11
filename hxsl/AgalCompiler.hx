@@ -29,7 +29,9 @@ import hxsl.Data;
 private typedef Temp = {
 	var liveBits : Array<Null<Int>>;
 	var lastWritePos : Array<Int>;
-	var assignedTo : Int;
+	var assignedTo : Array<Null<Int>>;
+	var assignedPos : Array<Null<Int>>;
+	var finalRegister : Int;
 	var assignedComps : Swizzle;
 	var invAssignedComps : Array<Int>;
 }
@@ -84,7 +86,7 @@ class AgalCompiler {
 		case VTmp: RTemp;
 		case VVar: RVar;
 		case VInput: RAttr;
-		case VTexture: throw "assert";
+		case VGlobalTexture, VTexture, VGlobalParam, VCompileConstant: throw "assert";
 		}
 		return { t : t, index : v.index, swiz : swiz, access : null };
 	}
@@ -127,6 +129,7 @@ class AgalCompiler {
 		// DEBUG
 		#if (debug && shaderCompDebug)
 		for( i in 0...temps.length ) {
+			if ( temps[i] == null ) continue;
 			var bits = temps[i].liveBits;
 			var lifes = [];
 			var p = 0;
@@ -192,6 +195,7 @@ class AgalCompiler {
 				mov(d, t, v.t);
 				return;
 			case CVar(_), CSwiz(_), CBlock(_), CAccess(_):
+			case CLiteral(_), CVector(_), CIf(_), CFor(_), CTexE(_): throw "assert";
 			}
 		compileTo(d, e);
 	}
@@ -273,34 +277,41 @@ class AgalCompiler {
 		if( write ) {
 			// alloc register
 			if( t == null ) {
-				t = { liveBits : [], lastWritePos : [ -1, -1, -1, -1], assignedTo : -1, assignedComps : null, invAssignedComps : [] };
+				t = { liveBits : [], lastWritePos : [ -1, -1, -1, -1], assignedTo : [], finalRegister : -1, assignedComps : [], assignedPos : [], invAssignedComps : [] };
 				temps[r.index] = t;
 			}
 			// set last-write per-component codepos
-			if( r.access != null )
+			if( r.access != null ) {
 				t.lastWritePos[Type.enumIndex(r.access.comp)] = codePos;
-			else if( r.swiz == null ) {
-				for( i in 0...4 )
+				t.assignedTo[Type.enumIndex(r.access.comp)] = null;
+			} else if( r.swiz == null ) {
+				for( i in 0...4 ) {
 					t.lastWritePos[i] = codePos;
+					t.assignedTo[i] = null;
+				}
 			} else {
-				for( s in r.swiz )
+				for( s in r.swiz ) {
 					t.lastWritePos[Type.enumIndex(s)] = codePos;
+					t.assignedTo[Type.enumIndex(s)] = null;
+				}
 			}
 			// copy-propagation
-			t.assignedTo = -1;
 			if( startRegister >= 0 ) {
 				switch( code[codePos] ) {
 				case OMov(d, v):
 					if( v.access == null ) {
-						t.assignedTo = startRegister;
 						// build component swizzle map
 						var s = d.swiz;
 						if( s == null ) s = [X, Y, Z, W];
 						var ss = v.swiz;
 						if( ss == null ) ss = [X, Y, Z, W];
-						t.assignedComps = [];
-						for( i in 0...s.length )
-							t.assignedComps[Type.enumIndex(s[i])] = ss[i];
+						
+						for ( i in 0...s.length ) {
+							var si = Type.enumIndex(s[i]);
+							t.assignedTo[si] = startRegister;
+							t.assignedPos[si] = codePos;
+							t.assignedComps[si] = ss[i];
+						}
 					}
 				default:
 				}
@@ -308,23 +319,43 @@ class AgalCompiler {
 			}
 		} else {
 			if( t == null ) throw "assert";
-			var s = if( r.access != null ) [r.access.comp] else if( r.swiz == null ) [X, Y, Z, W] else r.swiz;
+			// I don't think it makes sense to use the r.access.comp as the swizzle here...
+			//var s = if( r.access != null ) [r.access.comp] else if( r.swiz == null ) [X, Y, Z, W] else r.swiz;
+			var s = if( r.swiz == null ) [X, Y, Z, W] else r.swiz;
+
 			// if we need to read some components at some time
 			// make sure that we reserve all the components as soon
 			// as the first one is written
 			var minPos : Null<Int> = null;
-			var mask = 0, writes = 0;
+			var mask = 0;
 			for( s in s ) {
 				var bit = Type.enumIndex(s);
 				var pos = t.lastWritePos[bit];
-				if( pos != minPos ) writes++;
 				if( minPos == null || pos < minPos ) minPos = pos;
 				mask |= 1 << bit;
 			}
 
 			// copy-propagation
-			if( t.assignedTo >= 0 && writes == 1 ) {
-				r.index = t.assignedTo;
+			var copy=null;
+			for ( c in s ) {
+				var ci = Type.enumIndex(c);
+				var from = t.assignedTo[ci];
+				if ( from != null && (copy == null || from == copy) ) {
+					copy = from;
+
+					var fromTemp = temps[from];
+					var cc = t.assignedComps[ci];
+					if ( fromTemp.lastWritePos[Type.enumIndex(cc)] < t.assignedPos[ci] ) {
+						continue;
+					}
+				}
+
+				copy = null;
+				break;
+			}
+
+			if ( copy != null ) {
+				r.index = t.assignedTo[Type.enumIndex(s[0])];
 				r.swiz = [];
 				for( c in s )
 					r.swiz.push(t.assignedComps[Type.enumIndex(c)]);
@@ -343,7 +374,7 @@ class AgalCompiler {
 	}
 
 	function changeReg( r : Reg, t : Temp ) {
-		r.index = t.assignedTo;
+		r.index = t.finalRegister;
 		if( r.access != null )
 			r.access.comp = t.assignedComps[Type.enumIndex(r.access.comp)];
 		else if( r.swiz != null ) {
@@ -412,7 +443,7 @@ class AgalCompiler {
 				continue;
 			// not first X components available
 			// this is necessary for write masks
-			if( ncomps > 1 && rmask & (1 << ncomps - 1) != 0 )
+			if( ncomps > 1 && (rmask & ((1 << ncomps) - 1)) != 0 )
 				continue;
 			// if we have found a previous register that is better fit
 			if( packRegisters && found != null && foundUsage <= available - ncomps )
@@ -429,7 +460,7 @@ class AgalCompiler {
 			regs.push([]);
 		}
 		var reg = regs[found];
-		t.assignedTo = found;
+		t.finalRegister = found;
 		// list free components
 		var all = [X, Y, Z, W];
 		var comps = [];
@@ -588,6 +619,7 @@ class AgalCompiler {
 			case CNeq: OSne;
 			case CLt: OSlt;
 			case CMod: modGenerate;
+			case COr, CAnd: throw "assert";
 			})(dst, v1, v2));
 		case CUnop(op, p):
 			var v = compileSrc(p);
@@ -623,6 +655,7 @@ class AgalCompiler {
 			case CLog: OLog;
 			case CExp: OExp;
 			case CLen: throw "assert";
+			case CNot: throw "assert";
 			case CSin: OSin;
 			case CCos: OCos;
 			case CAbs: OAbs;
@@ -666,6 +699,8 @@ class AgalCompiler {
 			for( e in el )
 				compileExpr(e.e, e.v);
 			compileTo(dst,v);
+		case CLiteral(_), CVector(_), CIf(_), CFor(_), CTexE(_):
+			throw "assert";
 		}
 	}
 
@@ -688,6 +723,7 @@ class AgalCompiler {
 			var r1 = reg(v1);
 			var r2 = compileSrc(e2);
 			return { t : r2.t, index : r2.index, access : { t : r1.t, comp : r2.swiz[0], offset : r1.index }, swiz : initSwiz(e.t) };
+		case CLiteral(_), CVector(_), CIf(_), CFor(_), CTexE(_): throw "assert";
 		}
 	}
 

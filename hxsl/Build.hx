@@ -35,6 +35,7 @@ class Build {
 	#if macro
 	static function realType( t : VarType ) {
 		return switch( t ) {
+		case TBool: "Bool";
 		case TFloat: "Float";
 		case TFloat2, TFloat3, TFloat4: "flash.geom.Vector3D";
 		case TInt: "Int";
@@ -59,6 +60,8 @@ class Build {
 			inf.vars.push(c.name + " : " + t);
 			function addType( n : String, t : VarType )	{
 				switch( t ) {
+				case TBool:
+					throw "assert";
 				case TFloat:
 					add(n);
 					add(n);
@@ -106,7 +109,7 @@ class Build {
 		}
 		for( c in shader.consts ) {
 			for( f in c )
-				add(f);
+				add(f+"");
 			for( i in c.length...4 )
 				add("0");
 		}
@@ -156,7 +159,10 @@ class Build {
 		var c = new Compiler();
 		c.warn = Context.warning;
 		var v = try c.compile(v) catch( e : Error ) haxe.macro.Context.error(e.message, e.pos);
-
+		
+		for( v in v.vars )
+			trace(v);
+		
 		var c = new hxsl.AgalCompiler();
 		c.error = Context.error;
 
@@ -176,7 +182,7 @@ class Build {
 		var o = new haxe.io.BytesOutput();
 		new format.agal.Writer(o).write(fscode);
 		var fsbytes = haxe.Serializer.run(o.getBytes());
-
+		
 		var vs = buildShaderInfos(v.vertex);
 		var fs = buildShaderInfos(v.fragment);
 
@@ -188,7 +194,7 @@ class Build {
 
 		var bindCode =
 			"bindInit(buf);\n" +
-			Lambda.map(v.input, function(v) return "bindReg(" + (v.type == TInt ? 0 : Tools.floatSize(v.type)) + ");\n").join("") +
+			Lambda.map(v.vars, function(v) return v.kind == VInput ? "bindReg(" + (v.type == TInt ? 0 : Tools.floatSize(v.type)) + ");\n" : "").join("") +
 			"bindDone();\n"
 		;
 

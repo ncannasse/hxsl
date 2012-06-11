@@ -9,7 +9,8 @@ class Shader extends hxsl.Shader {
 		};
 		var tuv : Float2;
 		function vertex( mproj : Matrix ) {
-			out = pos.xyzw * mproj;
+			var tmp = pos.xyzw * mproj;
+			out = tmp;
 			tuv = uv;
 		}
 		function fragment( tex : Texture ) {
@@ -22,6 +23,7 @@ class Shader extends hxsl.Shader {
 class Main {
 
 	static function main() {
+		new hxsl.RuntimeCompiler();
 	}
 	
 }

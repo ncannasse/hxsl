@@ -27,21 +27,23 @@ import hxsl.Data;
 class Compiler {
 
 	var cur : Code;
-	var vars : Hash<Variable>;
-	var indexes : Array<Int>;
+	var allVars : Array<Variable>;
+	var scopeVars : Hash<Variable>;
 	var ops : Array<Array<{ p1 : VarType, p2 : VarType, r : VarType }>>;
 	var tempCount : Int;
 	var helpers : Hash<Data.ParsedCode>;
 	var ret : { v : CodeValue };
+	var inConstantExpr : Bool;
 	var allowTextureRead : Bool;
+	var globalsRead : Hash<Variable>;
+	var iterators : IntHash<Variable>;
 
-	public var config : { inlTranspose : Bool, inlInt : Bool, allowAllWMasks : Bool, padWrites : Bool, forceReads : Bool };
+	public var config : { inlTranspose : Bool, inlInt : Bool, allowAllWMasks : Bool, forceReads : Bool };
 
 	public function new() {
 		tempCount = 0;
-		vars = new Hash();
-		config = { inlTranspose : true, inlInt : true, allowAllWMasks : false, padWrites : true, forceReads : true };
-		indexes = [0, 0, 0, 0, 0, 0];
+		scopeVars = new Hash();
+		config = { inlTranspose : true, inlInt : true, allowAllWMasks : false, forceReads : true };
 		ops = new Array();
 		for( o in initOps() )
 			ops[Type.enumIndex(o.op)] = o.types;
@@ -63,7 +65,9 @@ class Compiler {
 		for( o in Lambda.map(Type.getEnumConstructs(CodeOp), function(c) return Type.createEnum(CodeOp, c)) )
 			ops.push({ op : o, types : switch( o ) {
 				case CAdd, CSub, CDiv, CPow, CMod: floats;
-				case CMin, CMax, CLt, CGte, CEq, CNeq: floats;
+				case CMin, CMax, CLt, CGte: floats;
+				case CEq, CNeq: floats.concat( [{p1 : TBool, p2 : TBool, r : TBool}] );
+				case CAnd, COr: [ { p1 : TBool, p2 : TBool, r : TBool } ];
 				case CDot: [ { p1 : TFloat4, p2 : TFloat4, r : TFloat }, { p1 : TFloat3, p2 : TFloat3, r : TFloat } ];
 				case CCross: [ { p1 : TFloat3, p2 : TFloat3, r : TFloat3 }];
 				case CMul: floats.concat([
@@ -84,7 +88,7 @@ class Compiler {
 		return null;
 	}
 
-	public dynamic function warn( msg:String, p:Position) {
+	public dynamic function warn( msg:String, p:haxe.macro.Expr.Position) {
 	}
 
 	function typeStr( t : VarType )  {
@@ -100,21 +104,35 @@ class Compiler {
 	}
 
 	public function compile( h : ParsedHxsl ) : Data {
+		allVars = [];
+		iterators = new IntHash();
 		allocVar("out", VOut, TFloat4, h.pos);
 
 		helpers = h.helpers;
-
-		var input = [];
-		for( v in h.input )
-			input.push(allocVar(v.n, VInput, v.t, v.p));
-
-		for( v in h.vars )
-			allocVar(v.n, VVar, v.t, v.p);
+		for ( v in h.vars ) {
+			var k = v.k;
+			switch ( v.t ) {
+			case TTexture(_): k = VGlobalTexture;
+			default:
+			}
+			allocVar(v.n, k, v.t, v.p);
+		}
 
 		var vertex = compileShader(h.vertex,true);
 		var fragment = compileShader(h.fragment,false);
+		checkGlobalVars(vertex, fragment);
+		
+		var vars = [];
+		for( v in allVars ) {
+			if( v.kind == null ) throw "assert";
+			switch( v.kind ) {
+			case VTmp:
+			default:
+				vars.push(v);
+			}
+		}
 
-		return { input : input, vertex : vertex, fragment : fragment };
+		return { vars : vars, vertex : vertex, fragment : fragment };
 	}
 
 	function compileShader( c : ParsedCode, vertex : Bool ) : Code {
@@ -127,45 +145,52 @@ class Compiler {
 			tex : [],
 			tempSize : 0,
 		};
-		for( v in c.args )
+		globalsRead = new Hash();
+
+		for( v in c.args ) {
 			switch( v.t ) {
 			case TTexture(_):
 				if( cur.vertex ) error("You can't use a texture inside a vertex shader", v.p);
-				cur.tex.push(allocVar(v.n, VTexture, v.t, v.p));
+				var tex = allocVar(v.n, VTexture, v.t, v.p);
+				globalsRead.set(tex.name, tex);
+				cur.tex.push(tex);
 			default:
 				cur.args.push(allocVar(v.n, VParam, v.t, v.p));
 			}
+		}
 
 		for( e in c.exprs )
 			compileAssign(e.v, e.e, e.p);
 
-		cur.tempSize = indexes[Type.enumIndex(VTmp)];
-		checkVars();
+		checkLocalVars();
 
 		// cleanup
-		for( v in vars )
-			switch( v.kind ) {
-			case VParam, VTmp: vars.remove(v.name);
-			default:
+		var old = scopeVars;
+		scopeVars = new Hash();
+		for( v in old ) {
+			if ( v.kind == null ) {
+				scopeVars.set(v.name, v);
+			} else switch( v.kind ) {
+			case VParam, VTmp:
+			default: scopeVars.set(v.name, v);
 			}
-		indexes[Type.enumIndex(VParam)] = 0;
-		indexes[Type.enumIndex(VTmp)] = 0;
+		}
 
 		return cur;
 	}
 
 	function saveVars() {
 		var old = new Hash();
-		for( v in vars.keys() )
-			old.set(v, vars.get(v));
+		for( v in scopeVars.keys() )
+			old.set(v, scopeVars.get(v));
 		return old;
 	}
 
 	function closeBlock( old : Hash<Variable> ) {
-		for( v in vars )
+		for( v in scopeVars )
 			if( v.kind == VTmp && old.get(v.name) != v && !v.read )
 				warn("Unused local variable '" + v.name + "'", v.pos);
-		vars = old;
+		scopeVars = old;
 	}
 
 	function compileAssign( v : Null<ParsedValue>, e : ParsedValue, p : Position ) {
@@ -176,6 +201,68 @@ class Compiler {
 				for( e in el )
 					compileAssign(e.v, e.e, e.p);
 				closeBlock(old);
+				return;
+			case PFor(it, first, last, expr):
+				var firstc = compileValueOpt(first);
+				var lastc = compileValueOpt(last);
+
+				inConstantExpr = true;
+				checkRead(firstc);
+				checkRead(lastc);
+				inConstantExpr = false;
+
+				var savedVars = saveVars();
+				var savedExprs = cur.exprs;
+				cur.exprs = [];
+
+				var itc = allocVar(it.n, it.k, it.t, it.p);
+				itc.write = Tools.fullBits(itc.type);
+				iterators.set(itc.id, itc);
+				compileAssign(expr.v, expr.e, expr.p);
+				iterators.remove(itc.id);
+
+				savedExprs.push( { v : null, e : {d:CFor(itc, firstc, lastc, cur.exprs), t:null, p:p} } );
+
+				scopeVars = savedVars;
+				cur.exprs = savedExprs;
+				return;
+			case PIf(cond, eif, eelse):
+				cond = optimizeValue(cond);
+
+				var ccond = compileConditional(cond);
+				unify(ccond.t, TBool, ccond.p);
+
+				// determine if branch result can be determined now
+				switch ( cond.v ) {
+				case PConst(c):
+					var result = parseLiteral(c);
+					if ( result != null && result > 0 ) {
+						for ( e in eif ) {
+							compileAssign(e.v, e.e, e.p);
+						}
+					} else if ( eelse != null ) {
+						for ( e in eelse ) {
+							compileAssign(e.v, e.e, e.p);
+						}
+					}
+				default:
+					var old = cur.exprs;
+					cur.exprs = [];
+					for ( e in eif ) {
+						compileAssign(e.v, e.e, e.p);
+					}
+					var ifexpr = cur.exprs;
+					var elseexpr = null;
+					if ( eelse != null ) {
+						cur.exprs = [];
+						for ( e in eelse ) {
+							compileAssign(e.v, e.e, e.p);
+						}
+						elseexpr = cur.exprs;
+					}
+					cur.exprs = old;
+					cur.exprs.push( {v : null, e : {d:CIf(ccond, ifexpr, elseexpr), t:null, p:p}} );
+				}
 				return;
 			case PReturn(v):
 				if( ret == null ) error("Unexpected return", e.p);
@@ -217,39 +304,30 @@ class Compiler {
 		addAssign(v, e, p);
 	}
 
-	function addAssign( v : CodeValue, e : CodeValue, p : Position ) {
+	function addAssign( v : CodeValue, e : CodeValue, p ) {
 		checkRead(e);
 		switch( v.d ) {
 		case CVar(vr, swiz):
-			var bits = swizBits(swiz, vr.type);
+			var bits = Tools.swizBits(swiz, vr.type);
+			// if no type, infer varying register
+			inferKind(vr, VVar, p);
+
 			switch( vr.kind ) {
 			case VVar:
 				if( !cur.vertex ) error("You can't write a variable in fragment shader", v.p);
-				if( vr.write & bits != 0  ) error("Multiple writes to the same variable are not allowed", v.p);
 				vr.write |= bits;
-			case VParam:
+			case VParam, VGlobalParam:
 				error("Constant values cannot be written", v.p);
+			case VCompileConstant:
+				error("Compile constants cannot be written", v.p);
 			case VInput:
 				error("Input values cannot be written", v.p);
 			case VOut:
-				if( !cur.vertex && vr.write != 0 ) error("You must use a single write for fragment shader output", v.p);
+				if ( !cur.vertex && swiz != null ) error("Can not use write mask for fragment output", v.p);
 				vr.write |= bits;
 			case VTmp:
 				vr.write |= bits;
-				vr.assign = null;
-				switch( e.d ) {
-				case CVar(v2, s2):
-					if( v2.kind != VTmp && bits == fullBits(vr.type) ) {
-						if( s2 == null ) {
-							s2 = [X, Y, Z, W];
-							while( (1<<s2.length)-1 > bits )
-								s2.pop();
-						}
-						vr.assign = { v : v2, s : s2 };
-					}
-				default:
-				}
-			case VTexture:
+			case VTexture, VGlobalTexture:
 				error("You can't write to a texture", v.p);
 			}
 			if( swiz != null ) {
@@ -266,97 +344,81 @@ class Compiler {
 		cur.exprs.push( { v : v, e : e } );
 	}
 
-	function swizBits( s : Array<Comp>, t : VarType ) {
-		if( s == null ) return fullBits(t);
-		var b = 0;
-		for( x in s )
-			b |= 1 << Type.enumIndex(x);
-		return b;
-	}
-
-	function fullBits( t : VarType ) {
-		return (1 << Tools.floatSize(t)) - 1;
-	}
-
 	function allocVar( name, k, t, p ) {
-		if( vars.exists(name) && k != VTmp ) error("Duplicate variable '" + name + "'", p);
-		var tkind = Type.enumIndex(k);
+		if( scopeVars.exists(name) && k != VTmp ) error("Duplicate variable '" + name + "'", p);
+		if ( k != null ) checkTypeForKind(t, k, p);
+
 		var v : Variable = {
 			name : name,
 			type : t,
 			kind : k,
-			index : indexes[tkind],
+			kindInferred : false,
+			id : allVars.length,
+			refId : -1,
+			index : 0,
 			pos : p,
 			read : false,
-			write : if( k == null ) fullBits(t) else switch( k ) { case VInput, VParam: fullBits(t); default: 0; },
+			write : if( k == null ) 0 else switch( k ) { case VInput, VParam, VGlobalParam: Tools.fullBits(t); default: 0; },
 			assign : null,
 		};
-		#if neko
-		var me = this;
-		untyped v.__string = function() return neko.NativeString.ofString(__this__.name + ":"+me.typeStr(__this__.type));
-		#end
-		vars.set(name, v);
-		indexes[tkind] += Tools.regSize(t);
+		allVars.push(v);
+		scopeVars.set(name, v);
 		return v;
+	}
+
+	// If the kind of a variable has not yet been determined, set it to k.
+	function inferKind( v:Variable, k:VarKind, p) {
+		if ( v.kind == null ) {
+			if ( v.type == TBool ) {
+				// Booleans can only be compile constants
+				k = VCompileConstant;
+			}
+
+			checkTypeForKind( v.type, k, p );
+			if ( v.read ) throw "assert";
+			if ( v.write != 0 ) throw "assert";
+			if ( v.assign != null ) throw "assert";
+
+			v.kind = k;
+			v.kindInferred = true;
+			v.write = switch(k) { case VInput, VParam, VGlobalParam: Tools.fullBits(v.type); default: 0; }
+		}
+	}
+
+	function checkTypeForKind( type, kind, pos ) {
+		switch ( kind ) {
+		case VCompileConstant:
+			switch ( type ) {
+			case TBool, TInt, TFloat, TFloat2, TFloat3, TFloat4:
+			default: error("Unsupported type for compile constant", pos);
+			}
+		default:
+			if ( type == TBool ) error("Bool type only supported for compile constants", pos);
+		}
 	}
 
 	function allocTemp( t, p ) {
 		return allocVar("$t" + tempCount++, VTmp, t, p);
 	}
 
-	function allocConst( cvals : Array<String>, p : Position ) : CodeValue {
-		var swiz = [X, Y, Z, W];
-		// remove extra zeroes at end
-		for( i in 0...cvals.length ) {
-			var v = cvals[i];
-			if( v.indexOf(".") < 0 ) v += ".";
-			while( v.charCodeAt(v.length - 1) == "0".code )
-				v = v.substr(0, v.length - 1);
-			cvals[i] = v;
-		}
-		// find an already existing constant
-		for( index in 0...cur.consts.length ) {
-			var c = cur.consts[index];
-			var s = [];
-			for( v in cvals ) {
-				for( i in 0...c.length )
-					if( c[i] == v ) {
-						s.push(swiz[i]);
-						break;
-					}
-			}
-			if( s.length == cvals.length )
-			return makeConst(index,s,p);
-		}
-		// find an empty slot
-		for( i in 0...cur.consts.length ) {
-			var c = cur.consts[i];
-			if( c.length + cvals.length <= 4 ) {
-				var s = [];
-				for( v in cvals ) {
-					s.push(swiz[c.length]);
-					c.push(v);
-				}
-				return makeConst(i,s,p);
+	function allocConst( cvals : Array<String>, p ) : CodeValue {
+		if ( cvals.length == 1 ) {
+			if ( cvals[0] == "true" ) {
+				if ( !inConstantExpr ) error("Can't use boolean values outside of constant expressions", p);
+				return {d : CLiteral([1.0]), t : TBool, p:p};
+			} else if ( cvals[0] == "false" ) {
+				if ( !inConstantExpr ) error("Can't use boolean values outside of constant expressions", p);
+				return {d : CLiteral([0.0]), t : TBool, p:p};
+			} else if ( cvals[0] == "null" ) {
+				if ( !inConstantExpr ) error("Can't use null outside of constant expressions", p);
 			}
 		}
-		var index = cur.consts.length;
-		cur.consts.push(cvals);
-		return makeConst(index, swiz.splice(0, cvals.length), p);
-	}
 
-	function makeConst(index:Int, swiz, p) {
-		var v : Variable = {
-			name : "$c" + index,
-			kind : VParam,
-			type : TFloat4,
-			index : index + indexes[Type.enumIndex(VParam)],
-			read : true,
-			write : 0,
-			pos : p,
-			assign : null,
-		};
-		return { d : CVar(v, swiz), t : Tools.makeFloat(swiz.length), p : p };
+		var pvals = [];
+		for ( c in cvals ) {
+			pvals.push( parseLiteral(c) );
+		}
+		return { d : CLiteral(pvals), t : Tools.makeFloat(cvals.length), p:p };
 	}
 
 	function constSwiz(k,count) {
@@ -366,24 +428,56 @@ class Compiler {
 		return s;
 	}
 
-	function checkVars() {
-		var shader = (cur.vertex ? "vertex" : "fragment")+" shader";
-		for( v in vars ) {
+	function checkGlobalVars(vertex, fragment) {
+		for ( v in scopeVars ) {
 			var p = v.pos;
+
+			if ( v.kind == null ) {
+				warn("Unused global variable '" + v.name + "'", p);
+				continue;
+			}
+
+			switch ( v.kind ) {
+			case VGlobalParam:
+				if ( !v.read ) warn("Uniform variable '" + v.name + "' is not used.", p);
+			case VCompileConstant:
+				if ( !v.read ) warn("Compile constant '" + v.name + "' is not used.", p);
+			case VInput:
+				if( !v.read ) {
+					warn("Input '" + v.name + "' is not used.", p);
+					// force the input read
+					if( config.forceReads ) {
+						cur = vertex;
+						addAssign( { d : CVar(allocTemp(TFloat4, p)), t : TFloat4, p : p }, { d : CVar(v), t : TFloat4, p : p }, p);
+					}
+				}
+			case VVar, VOut, VTexture, VGlobalTexture:
+			default:
+				throw "assert";
+			}
+		}
+	}
+
+	function checkLocalVars() {
+		var shader = (cur.vertex ? "vertex" : "fragment")+" shader";
+		for( v in scopeVars ) {
+			var p = v.pos;
+			if ( v.kind == null )
+				continue;
+
 			switch( v.kind ) {
 			case VOut:
 				if( v.write == 0 ) error("Output is not written by " + shader, p);
-				if( v.write != fullBits(v.type) ) error("Some output components are not written by " + shader, p);
+				if( v.write != Tools.fullBits(v.type) ) error("Some output components are not written by " + shader, p);
 				v.write = 0; // reset status between two shaders
 			case VVar:
 				if( cur.vertex ) {
 					if( v.write == 0 ) {
 						// delay error
-					} else if( v.write != fullBits(v.type) )
+					} else if( v.write != Tools.fullBits(v.type) )
 						error("Some components of variable '" + v.name + "' are not written by vertex shader", p);
 					else if( v.write != 15 ) {
-						// force the output write
-						padWrite(v);
+						// force the output write in RuntimeCompiler
 					}
 				} else {
 					if( !v.read && v.write == 0 )
@@ -393,19 +487,12 @@ class Compiler {
 					else if( v.write == 0 )
 						error("Variable '" + v.name + "' is not written by vertex shader", p);
 				}
-			case VInput:
-				if( cur.vertex && !v.read ) {
-					warn("Input '" + v.name + "' is not used by " + shader, p);
-					// force the input read
-					if( config.forceReads )
-						addAssign( { d : CVar(allocTemp(TFloat4, p)), t : TFloat4, p : p }, { d : CVar(v), t : TFloat4, p : p }, p);
-				}
 			case VTmp:
 				if( !v.read ) warn("Unused local variable '" + v.name+"'", p);
 			case VParam:
 				if( !v.read ) warn("Parameter '" + v.name + "' not used by " + shader, p);
-			case VTexture:
-				if( !v.read ) {
+			case VTexture, VGlobalTexture:
+				if( !cur.vertex && !v.read ) {
 					warn("Unused texture " + v.name, p);
 					if( config.forceReads ) {
 						// force the texture read
@@ -417,102 +504,83 @@ class Compiler {
 						addAssign(t, { d : CTex(v,allocConst(cst,p),[]), t : TFloat4, p : p }, p);
 					}
 				}
+			case VGlobalParam, VCompileConstant, VInput:
+				// checked in checkGlobalVars
 			}
 		}
-	}
-
-	function padWrite( v : Variable ) {
-		if( !config.padWrites )
-			return;
-		// if we already have a partial "mov" copy, we can simply extend the writing on other components
-		for( e in cur.exprs ) {
-			if( e.v == null ) continue;
-			switch( e.v.d ) {
-			case CVar(vv, sv):
-				if( v == vv && isGoodSwiz(sv) ) {
-					switch( e.e.d ) {
-					case CVar(v2, sv2):
-						// only allow "mov" extension if we are sure that the variable is padded with "1"
-						if( v2.kind == VInput || v2.kind == VVar ) {
-							// remove swizzle on write
-							var vn = Reflect.copy(v);
-							vn.type = TFloat4;
-							e.v.d = CVar(vn);
-							// remove swizzle on read
-							if( isGoodSwiz(sv2) ) {
-								var vn2 = Reflect.copy(v2);
-								vn2.type = TFloat4;
-								e.e.d = CVar(vn2);
-							} else
-							// or pad swizzle on input var
-								while( sv2.length < 4 )
-									sv2.push(X);
-							// adjust types
-							e.e.t = e.v.t = TFloat4;
-							return;
-						}
-					default:
-					}
-				}
-			default:
-			}
-		}
-		// store 1-values into remaining components
-		var missing = [], ones = [];
-		for( i in Tools.floatSize(v.type)...4 ) {
-			missing.push(Type.createEnumIndex(Comp, i));
-			ones.push("1");
-		}
-		var c = allocConst(ones,v.pos);
-		checkRead(c);
-		cur.exprs.push( { v : { d : CVar(v, missing), t : Tools.makeFloat(missing.length), p : v.pos }, e : c } );
 	}
 
 	function rowVar( v : Variable, row : Int ) {
 		var v2 = Reflect.copy(v);
 		v2.name += "[" + row + "]";
 		v2.index += row;
+		v2.id = allVars.length;
+		v2.refId = v.id;
 		v2.type = Tools.makeFloat(switch( v.type ) {
 		case TMatrix(r, c, t): if( t.t ) r else c;
 		default: -1;
 		});
+		allVars.push(v2);
 		return v2;
 	}
 
-	function isGoodSwiz( s : Array<Comp> ) {
-		if( s == null ) return true;
-		var cur = 0;
-		for( x in s )
-			if( Type.enumIndex(x) != cur++ )
-				return false;
-		return true;
-	}
+	function checkReadVar( v : Variable, swiz, p ) {
+		// If this is within a conditional, interpret as a compile constant, otherwise a uniform.
+		inferKind(v, inConstantExpr ? VCompileConstant : VGlobalParam, p);
 
-	function isUnsupportedWriteMask( s : Array<Comp> ) {
-		return s != null && s.length > 1 && (s[0] != X || s[1] != Y || (s.length > 2 && (s[2] != Z || (s.length > 3 && s[3] != W))));
-	}
+		if ( inConstantExpr ) {
+			if ( v.kind == VGlobalParam && v.kindInferred ) {
+				// Re-infer Uniform --> CompileConstant
+				if ( !v.read ) throw "assert";
+				checkTypeForKind(v.type, VCompileConstant, p);
+				v.kind = VCompileConstant;
+				if ( !globalsRead.exists(v.name) ) throw "assert";
+			}
 
-	function checkReadVar( v : Variable, swiz, p : Position ) {
-		switch( v.kind ) {
-		case VOut: error("Output cannot be read", p);
-		case VVar: if( cur.vertex ) error("You cannot read variable in vertex shader", p); v.read = true;
-		case VParam: v.read = true;
-		case VTmp:
-			if( v.write == 0 ) error("Variable '"+v.name+"' has not been initialized", p);
-			var bits = swizBits(swiz, v.type);
-			if( v.write & bits != bits ) error("Some fields of '"+v.name+"' have not been initialized", p);
-			v.read = true;
-		case VInput:
-			if( !cur.vertex ) error("You cannot read input variable in fragment shader", p);
-			v.read = true;
-		case VTexture:
-			if( !allowTextureRead )
-				error("You can't read from a texture", p);
+			switch ( v.kind ) {
+			case VCompileConstant:
+				v.read = true;
+			default:
+				if ( !iterators.exists(v.id) ) {
+					error("You can only use constants and literals in a conditional statement.", p);
+				}
+			}
+		} else {
+			switch( v.kind ) {
+			case VCompileConstant:
+				v.read = true;
+				if ( !globalsRead.exists(v.name) ) {
+					globalsRead.set(v.name, v);
+					cur.args.push(v);
+				}
+			case VOut: error("Output cannot be read", p);
+			case VVar: if( cur.vertex ) error("You cannot read variable in vertex shader", p); v.read = true;
+			case VParam: v.read = true;
+			case VGlobalParam:
+				v.read = true;
+				if ( !globalsRead.exists(v.name) ) {
+					globalsRead.set(v.name, v);
+					cur.args.push(v);
+				}
+			case VTmp:
+				if( v.write == 0 ) error("Variable '"+v.name+"' has not been initialized", p);
+				var bits = Tools.swizBits(swiz, v.type);
+				if( v.write & bits != bits ) error("Some fields of '"+v.name+"' have not been initialized", p);
+				v.read = true;
+			case VInput:
+				v.read = true;
+			case VTexture, VGlobalTexture:
+				if( !allowTextureRead )
+					error("You can't read from a texture", p);
+			}
 		}
 	}
 
 	function checkRead( e : CodeValue ) {
 		switch( e.d ) {
+		case CLiteral(_):
+		case CIf(_), CFor(_):
+			throw "assert";
 		case CVar(v, swiz):
 			checkReadVar(v,swiz,e.p);
 		case COp(_, e1, e2):
@@ -520,7 +588,7 @@ class Compiler {
 			checkRead(e2);
 		case CUnop(_, e):
 			checkRead(e);
-		case CTex(t, v, _):
+		case CTex(t, v, _), CTexE(t, v, _):
 			if( cur.vertex ) error("You can't read from texture in vertex shader", e.p);
 			t.read = true;
 			checkRead(v);
@@ -528,6 +596,8 @@ class Compiler {
 			checkRead(v);
 		case CBlock(_, v):
 			checkRead(v);
+		case CVector(values):
+			for ( v in values ) checkRead(v);
 		case CAccess(v1, e2):
 			checkReadVar(v1,null,e.p);
 			checkRead(e2);
@@ -574,7 +644,10 @@ class Compiler {
 				ol.push(optimizeValue(e));
 			return { v : PVector(ol), p : e.p };
 		case PTex(v, acc, flags):
-			return { v : PTex(v, optimizeValue(acc), flags), p : e.p };
+			var newFlags = [];
+			for ( f in flags )
+				newFlags.push( {v:f.v, e:optimizeValue(f.e), p:f.p} );
+			return { v : PTex(v, optimizeValue(acc), newFlags), p : e.p };
 		case PSwiz(e1, swiz):
 			var o1 = optimizeValue(e1);
 			if( o1 != e1 )
@@ -586,40 +659,77 @@ class Compiler {
 			for( e in el )
 				ol.push(optimizeValue(e));
 			return { v : PCall(n, ol), p : e.p };
-		case PIf(ec, e1, e2):
-			return { v : PIf(optimizeValue(ec), optimizeValue(e1), optimizeValue(e2)), p : e.p };
-		case PVar(_), PLocal(_), PConst(_), PAccess(_):
+		case PIff(ec, e1, e2):
+			return { v : PIff(optimizeValue(ec), optimizeValue(e1), optimizeValue(e2)), p : e.p };
+		case PVar(_), PLocal(_), PConst(_), PAccess(_), PIf(_), PFor(_):
 		}
 		return e;
 	}
 
+	function compileConditional( e : ParsedValue ) : CodeValue {
+		var old = inConstantExpr;
+		inConstantExpr = true;
+		var result = null;
+		switch ( e.v ) {
+		case PVar(_):
+			result = compileValue(e);
+		case PVector(values):
+			if( values.length == 0 || values.length > 4 )
+				error("Vector size should be 1-4", e.p);
+			var literals = [];
+			for ( val in values ) {
+				switch ( val.v ) {
+				case PConst(i): literals.push(parseLiteral(i));
+				default: error("Vector declarations in conditionals can only use literal values", e.p);
+				}
+			}
+			result = { d: CLiteral(literals), t : Tools.makeFloat(literals.length), p : e.p };
+		case PConst(i):
+			return allocConst([i], e.p);
+		case POp(op, e1, e2):
+			result = makeOp(op, e1, e2, e.p, true);
+		case PUnop(op, e1):
+			result = makeUnop(op, e1, e.p, true);
+		case PIff(cond, eif, eelse):
+			result = makeIff(cond, eif, eelse, e.p);
+		default:
+			error("Unsupported operation in conditional", e.p);
+		}
+		if ( !old ) {
+			checkRead(result);
+		}
+		inConstantExpr = old;
+		return result;
+	}
+
 	function compileValue( e : ParsedValue, ?isTarget ) : CodeValue {
 		switch( e.v ) {
-		case PBlock(_), PReturn(_):
+		case PBlock(_), PReturn(_), PIf(_), PFor(_):
 			throw "assert";
 		case PVar(vname):
-			var v = vars.get(vname);
+			var v = scopeVars.get(vname);
 			if( v == null ) error("Unknown variable '" + vname + "'", e.p);
 			var swiz = null;
 			var t = v.type;
-			if( isTarget )
-				v.assign = null;
-			else if( v.assign != null ) {
-				v.read = true;
-				swiz = v.assign.s;
-				v = v.assign.v;
-			}
 			return { d : CVar(v, swiz), t : t, p : e.p };
 		case PAccess(vname, eindex):
-			var v = vars.get(vname);
+			var v = scopeVars.get(vname);
 			if( v == null ) error("Unknown variable '" + vname + "'", e.p);
-			var t = switch( v.type ) {
-			case TArray(t, _): t;
-			default: error("You can only index Array variables", e.p);
+			var type, index;
+			switch( v.type ) {
+			case TArray(t, _):
+				type = t;
+				index = compileValue(eindex);
+				unify(index.t, TFloat, index.p);
+			case TFloat, TFloat2, TFloat3, TFloat4:
+				type = TFloat;
+				index = compileConditional(eindex);
+				if ( !tryUnify(index.t, TFloat) ) {
+					unify(index.t, TInt, index.p);
+				}
+			default: error("You can't index a variable of this type", e.p);
 			}
-			var eindex = compileValue(eindex);
-			unify(eindex.t, TFloat, eindex.p);
-			return { d : CAccess(v, eindex), t : t, p : e.p };
+			return { d : CAccess(v, index), t : type, p : e.p };
 		case PConst(i):
 			return allocConst([i], e.p);
 		case PLocal(v):
@@ -695,37 +805,86 @@ class Compiler {
 		case PUnop(op, e1):
 			return makeUnop(op, e1, e.p);
 		case PTex(vname, acc, flags):
-			var v = vars.get(vname);
+			var v = scopeVars.get(vname);
 			if( v == null ) error("Unknown texture '" + vname + "'", e.p);
 			var acc = compileValue(acc);
+
+			var single = false;
+			var tflags = [];
+			var cflags = [];
+			for ( f in flags ) {
+				if ( f.v == null ) {
+					switch ( f.e.v ) {
+					case PConst(ident):
+						switch (ident) {
+						case "mm_no":
+							cflags.push( { t:PMipMap, e: { d:CLiteral([0.0]), t:TFloat, p:f.p }} );
+							tflags.push(TMipMapDisable);
+						case "mm_near":
+							cflags.push( { t:PMipMap, e: { d:CLiteral([1.0]), t:TFloat, p:f.p }} );
+							tflags.push(TMipMapNearest);
+						case "mm_linear":
+							cflags.push( { t:PMipMap, e: { d:CLiteral([2.0]), t:TFloat, p:f.p }} );
+							tflags.push(TMipMapLinear);
+						case "nearest":
+							cflags.push( { t:PFilter, e: { d:CLiteral([0.0]), t:TFloat, p:f.p }} );
+							tflags.push(TFilterNearest);
+						case "linear":
+							cflags.push( { t:PFilter, e: { d:CLiteral([1.0]), t:TFloat, p:f.p }} );
+							tflags.push(TFilterLinear);
+						case "wrap":
+							cflags.push( { t:PWrap, e: { d:CLiteral([1.0]), t:TFloat, p:f.p }} );
+							tflags.push(TWrap);
+						case "clamp":
+							cflags.push( { t:PWrap, e: { d:CLiteral([0.0]), t:TFloat, p:f.p }} );
+							tflags.push(TClamp);
+						case "single":
+							single = true;
+							cflags.push( { t:PSingle, e: { d:CLiteral([1.0]), t:TFloat, p:f.p }} );
+							tflags.push(TSingle);
+						default:
+							throw "assert"; // should've been caught in parser
+						}
+					default: throw "assert";
+					}
+				} else {
+					var e = compileConditional(f.e);
+					switch ( f.v.v ) {
+					case PConst(ident):
+						switch (ident) {
+						case "mipmap": if (!tryUnify(e.t, TFloat)) unify(e.t, TInt, e.p); cflags.push({t:PMipMap, e:e});
+						case "filter": if (!tryUnify(e.t, TFloat)) unify(e.t, TInt, e.p); cflags.push({t:PFilter, e:e});
+						case "wrap": unify(e.t, TBool, e.p); cflags.push({t:PWrap, e:e});
+						case "clamp": unify(e.t, TBool, e.p); cflags.push({t:PClamp, e:e});
+						case "lod":
+							unify(e.t, TFloat, e.p);
+							cflags.push( { t:PLodBias, e:e } );
+							switch( e.d ) {
+							case CLiteral(v):
+								tflags.push(TLodBias(v[0]));
+							default:
+							}
+						default: throw "assert"; // should've been caught in parser
+						}
+					default: throw "assert";
+					}
+				}
+			}
+
 			switch( v.type ) {
 			case TTexture(cube):
-				unify(acc.t, cube?TFloat3:(Lambda.has(flags,TSingle) ? TFloat : TFloat2), acc.p);
+				if ( !globalsRead.exists(v.name) ) {
+					globalsRead.set(v.name, v);
+					cur.tex.push(v);
+				}
+				unify(acc.t, cube?TFloat3:(single ? TFloat : TFloat2), acc.p);
 			default: error("'"+vname + "' is not a texture", e.p);
 			}
-			return { d : CTex(v, acc, flags), t : TFloat4, p : e.p };
-		case PIf(cond,e1,e2):
-			var cond = compileValue(cond);
-			var cond2 = switch( cond.d ) {
-				case COp(op, e1, e2): if( op == CGte || op == CLt ) { d : COp(op == CGte ? CLt : CGte,e1,e2), t : cond.t, p : cond.p } else null;
-			default: null;
-			}
-			if( cond2 == null ) error("'if' condition should be a comparison operator", cond.p);
-			var e1 = compileValue(e1);
-			var e2 = compileValue(e2);
-			unify(e2.t, e1.t, e2.p);
-			if( !isFloat(e1.t) ) error("'if' values should be vectors", e.p);
-			var mkCond = function(c) return c;
-			if( cond.t != e1.t ) {
-				if( cond.t != TFloat ) unify(cond.t, e1.t, cond.p);
-				cond = { d : CSwiz(cond, constSwiz(0, Tools.floatSize(e1.t))), t : e1.t, p : cond.p };
-				cond2 = { d : CSwiz(cond2, constSwiz(0, Tools.floatSize(e1.t))), t : e1.t, p : cond.p };
-			}
-			// compile "if( c ) e1 else e2" into "c * e1 + (!c) * e2"
-			// we could optimize by storing the value of "c" into a temp var
-			var e1 = { d : COp(CMul, cond, e1), t : e1.t, p : e.p };
-			var e2 = { d : COp(CMul, cond2, e2), t : e2.t, p : e.p };
-			return { d : COp(CAdd, e1, e2), t : e1.t, p : e.p };
+			if( cflags.length == tflags.length )
+				return { d : CTex(v, acc, tflags), t : TFloat4, p : e.p };
+			return { d : CTexE(v, acc, cflags), t : TFloat4, p : e.p };
+		case PIff(cond,e1,e2):
+			return makeIff(cond, e1, e2, e.p);
 		case PVector(values):
 			return compileVector(values, e.p);
 		case PRow(v, index):
@@ -757,11 +916,13 @@ class Compiler {
 			allowTextureRead = false;
 			if( h.args.length != vl.length ) error("Function " + n + " requires " + h.args.length + " arguments", e.p);
 			var old = saveVars();
-			// only allow access to globals/output from within out helper functions
+			// only allow access to globals/output from within our helper functions
 			for( v in old )
-				switch( v.kind ) {
-				case VTmp, VTexture, VParam: vars.remove(v.name);
-				case VOut, VInput, VVar:
+				if ( v.kind != null ) {
+					switch( v.kind ) {
+					case VTmp, VTexture, VParam: scopeVars.remove(v.name);
+					case VOut, VInput, VVar, VGlobalParam, VGlobalTexture, VCompileConstant:
+					}
 				}
 			// init args
 			for( i in 0...h.args.length ) {
@@ -773,7 +934,7 @@ class Compiler {
 					switch( value.d ) {
 					case CVar(v, _):
 						// copy variable
-						vars.set(a.n, v);
+						scopeVars.set(a.n, v);
 					default:
 						error("Invalid texture access", value.p);
 					}
@@ -799,51 +960,35 @@ class Compiler {
 	function compileVector(values:Array<ParsedValue>, p) {
 		if( values.length == 0 || values.length > 4 )
 			error("Vector size should be 1-4", p);
-		var consts = [];
-		var exprs = [];
-		for( i in 0...values.length ) {
-			var e = values[i];
-			switch( e.v ) {
-			case PConst(c): consts.push(c);
-			default: exprs[i] = compileValue(e);
+
+		var cvals = [];
+		var numFloats = 0;
+		var floatTypes = [ TFloat, TFloat2, TFloat3, TFloat4 ];
+		for ( v in values ) {
+			var e = compileValue(v);
+			var unified = false;
+			for ( t in floatTypes ) {
+				if ( tryUnify(e.t, t) ) {
+					unified = true;
+					break;
+				}
 			}
-		}
-		// all values are constants
-		if( consts.length == values.length )
-			return allocConst(consts, p);
-		// declare a new temporary
-		var v = allocTemp(Tools.makeFloat(values.length),p);
-		// assign expressions first
-		var old = cur.exprs;
-		cur.exprs = [];
-		var write = [];
-		for( i in 0...values.length ) {
-			var e = exprs[i];
-			var c = [X, Y, Z, W][i];
-			if( e == null ) {
-				write.push(c);
-				continue;
+			if ( !unified ) {
+				unify(e.t, TFloat, e.p);
 			}
-			unify(e.t,TFloat,e.p);
-			addAssign( { d : CVar(v, [c]), t : TFloat, p : e.p }, e, p);
+			cvals.push(e);
+			numFloats += Tools.floatSize(e.t);
 		}
-		// assign constants if any
-		if( write.length > 0 ) {
-			if( isUnsupportedWriteMask(write) )
-				for( i in 0...write.length )
-					addAssign( { d : CVar(v, [write[i]]), t : TFloat, p : p }, allocConst([consts[i]], p), p);
-			else
-				addAssign( { d : CVar(v, write), t : Tools.makeFloat(write.length), p : p }, allocConst(consts, p), p);
+
+		if ( numFloats > 4 ) {
+			error("Vector can only include up to 4 elements", p);
 		}
-		// return temporary
-		var ret = { d : CVar(v), t : v.type, p : p };
-		var sub = { d : CBlock(cur.exprs, ret), t : ret.t, p : p };
-		cur.exprs = old;
-		return sub;
+
+		return { d : CVector(cvals), t : floatTypes[numFloats-1], p : p };
 	}
 
 	function tryUnify( t1 : VarType, t2 : VarType ) {
-		if( t1 == t2 ) return true;
+		if( Type.enumEq(t1, t2) ) return true;
 		switch( t1 ) {
 		case TMatrix(r,c,t1):
 			switch( t2 ) {
@@ -893,10 +1038,10 @@ class Compiler {
 		}
 	}
 
-	function makeConstOp( op : CodeOp, v1 : String, v2 : String, p : Position ) {
+	function makeConstOp( op : CodeOp, v1 : String, v2 : String, p ) {
 		var me = this;
 		function makeConst(f:Float->Float->Float) {
-			var r = f(Std.parseFloat(v1), Std.parseFloat(v2));
+			var r = f(parseLiteral(v1), parseLiteral(v2));
 			if( r + 1 == r ) r = 0; // NaN / Infinite
 			return { v : PConst(Std.string(r)), p : p };
 		}
@@ -914,12 +1059,50 @@ class Compiler {
 		case CDiv: makeConst(function(x, y) return x / y);
 		case CPow: makeConst(function(x, y) return Math.pow(x,y));
 		case CMod: makeConst(function(x, y) return x % y);
+		case CAnd: makeConst(function(x, y) { return (x > 0 && y > 0) ? 1 : 0; });
+		case COr:  makeConst(function(x, y) { return (x > 0 || y > 0) ? 1 : 0; });
 		case CCross: null;
 		};
 	}
 
+	static function parseLiteral(s:String) : Float {
+		if ( s == "null" ) { return 0.0; }
+		if ( s == "true" ) { return 1.0; }
+		else if ( s == "false" ) { return 0.0; }
+		else return Std.parseFloat(s);
+	}
 
-	function makeOp( op : CodeOp, e1 : ParsedValue, e2 : ParsedValue, p : Position ) {
+	function makeIff( cond : ParsedValue, e1 : ParsedValue, e2 : ParsedValue, pos ) {
+		var cond = inConstantExpr ? compileConditional(cond) : compileValue(cond);
+		var cond2 = switch( cond.d ) {
+			case COp(op, e1, e2):
+				if( op == CGte || op == CLt )
+					{ d : COp(op == CGte ? CLt : CGte,e1,e2), t : cond.t, p : cond.p }
+				else if ( op == CAnd || op == COr )
+					{ d : CUnop(CNot, cond), t : cond.t, p : cond.p }
+				else null;
+			case CVar(v, swiz): if ( v.type == TBool ) { d : CUnop(CNot, cond), t : cond.t, p : cond.p } else null;
+			default: null;
+		}
+		if( cond2 == null ) unify(cond.t, TBool, cond.p);
+		var e1 = inConstantExpr ? compileConditional(e1) : compileValue(e1);
+		var e2 = inConstantExpr ? compileConditional(e2) : compileValue(e2);
+		unify(e2.t, e1.t, e2.p);
+		if( !Tools.isFloat(e1.t) && e1.t != TBool ) error("'if' values should be vectors or bools", pos);
+		var mkCond = function(c) return c;
+		if( cond.t != TBool && cond.t != e1.t ) {
+			if( cond.t != TFloat ) unify(cond.t, e1.t, cond.p);
+			cond = { d : CSwiz(cond, constSwiz(0, Tools.floatSize(e1.t))), t : e1.t, p : cond.p };
+			cond2 = { d : CSwiz(cond2, constSwiz(0, Tools.floatSize(e1.t))), t : e1.t, p : cond.p };
+		}
+		// compile "if( c ) e1 else e2" into "c * e1 + (!c) * e2"
+		// we could optimize by storing the value of "c" into a temp var
+		var e1 = { d : COp(CMul, cond, e1), t : e1.t, p : pos };
+		var e2 = { d : COp(CMul, cond2, e2), t : e2.t, p : pos };
+		return { d : COp(CAdd, e1, e2), t : e1.t, p : pos };
+	}
+
+	function makeOp( op : CodeOp, e1 : ParsedValue, e2 : ParsedValue, p, ?conditional ) {
 		switch( op ) {
 		// optimize 1 / sqrt(x) && 1 / x
 		case CDiv:
@@ -944,14 +1127,42 @@ class Compiler {
 					return makeUnop(CExp, e2, p);
 			default:
 			}
+		// prevent use of boolean operators outside conditionals
+		case CAnd, COr:
+			if ( !conditional ) error("Unsupported operation outside of conditional", p);
 		default:
 		}
 
-		var e1 = compileValue(e1);
-		var e2 = compileValue(e2);
+		var e1 = conditional ? compileConditional(e1) : compileValue(e1);
+		var e2 = conditional ? compileConditional(e2) : compileValue(e2);
 
 		// look for a valid operation as listed in "ops"
 		var types = ops[Type.enumIndex(op)];
+		if ( conditional ) {
+			switch(op) {
+			case CEq, CNeq:
+				// override these operators to return booleans
+				types = [
+					{ p1 : TInt, p2 : TInt, r : TBool },
+					{ p1 : TFloat, p2 : TInt, r : TBool },
+					{ p1 : TInt, p2 : TFloat, r : TBool },
+					{ p1 : TFloat, p2 : TFloat, r : TBool },
+					{ p1 : TFloat2, p2 : TFloat2, r : TBool },
+					{ p1 : TFloat3, p2 : TFloat3, r : TBool },
+					{ p1 : TFloat4, p2 : TFloat4, r : TBool },
+				];
+			case CGte, CLt:
+				// only support scalar comparisons
+				types = [
+					{ p1 : TInt, p2 : TInt, r : TBool },
+					{ p1 : TFloat, p2 : TInt, r : TBool },
+					{ p1 : TInt, p2 : TFloat, r : TBool },
+					{ p1 : TFloat, p2 : TFloat, r : TBool },
+				];
+			default:
+			}
+		}
+
 		var first = null;
 		for( t in types ) {
 			if( isCompatible(e1.t, t.p1) && isCompatible(e2.t, t.p2) ) {
@@ -961,29 +1172,21 @@ class Compiler {
 			}
 		}
 		// if we have an operation on a single scalar, let's map it on all floats
-		if( e2.t == TFloat && isFloat(e1.t) )
+		if( e2.t == TFloat && Tools.isFloat(e1.t) )
 			for( t in types )
 				if( isCompatible(e1.t, t.p1) && isCompatible(e1.t, t.p2) ) {
 					var swiz = [];
-					var s = switch( e2.d ) {
-					case CVar(_, s): if( s == null ) X else s[0];
-					default: X;
-					}
 					for( i in 0...Tools.floatSize(e1.t) )
-						swiz.push(s);
+						swiz.push(X);
 					return { d : COp(op,e1,{ d : CSwiz(e2, swiz), t : e1.t, p : e2.p }), t : e1.t, p : p };
 				}
 		// ...or the other way around
-		if( e1.t == TFloat && isFloat(e2.t) )
+		if( e1.t == TFloat && Tools.isFloat(e2.t) )
 			for( t in types )
 				if( isCompatible(e2.t, t.p1) && isCompatible(e2.t, t.p2) ) {
 					var swiz = [];
-					var s = switch( e1.d ) {
-					case CVar(_, s): if( s == null ) X else s[0];
-					default: X;
-					}
 					for( i in 0...Tools.floatSize(e2.t) )
-						swiz.push(s);
+						swiz.push(X);
 					return { d : COp(op,{ d : CSwiz(e1, swiz), t : e2.t, p : e1.p }, e2), t : e2.t, p : p };
 				}
 
@@ -1003,7 +1206,7 @@ class Compiler {
 		return null;
 	}
 
-	function makeConstUnop( op : CodeUnop, v : String, p : Position ) {
+	function makeConstUnop( op : CodeUnop, v : String, p ) {
 		var me = this;
 		function makeConst(f:Float->Float) {
 			var r = f(Std.parseFloat(v));
@@ -1025,11 +1228,18 @@ class Compiler {
 		case CSat: makeConst(Math.cos);
 		case CNeg: makeConst(function(x) return -x);
 		case CLen: makeConst(function(x) return x);
+		case CNot: makeConst(function(x) return x == 0 ? 1.0 : 0.0);
 		};
 	}
 
-	function makeUnop( op : CodeUnop, e : ParsedValue, p : Position ) {
-		var e = compileValue(e);
+	function makeUnop( op : CodeUnop, e : ParsedValue, p, ?conditional ) {
+		switch ( op ) {
+		case CNot:
+			if ( !conditional ) error("Unsupported operation outside of conditional", p);
+		default:
+		}
+
+		var e = conditional ? compileConditional(e) : compileValue(e);
 		var rt = e.t;
 		switch( op ) {
 		case CNorm: rt = TFloat3;
@@ -1061,8 +1271,10 @@ class Compiler {
 							addAssign( { d : CVar(t,[[X, Y, Z, W][s]]), t : TFloat, p : p }, { d : CVar(vrow[s],[[X,Y,Z,W][i]]), t : TFloat, p : p }, p);
 					}
 					var vmt = Reflect.copy(t0);
+					vmt.id = allVars.length;
 					vmt.type = TMatrix(c, r, { t : !t.t } );
-					vmt.write = fullBits(vmt.type);
+					vmt.write = Tools.fullBits(vmt.type);
+					allVars.push(vmt);
 					return { d : CVar(vmt), t : vmt.type, p : p };
 				}
 				return { d : CUnop(CTrans, e), t : TMatrix(c, r, { t : !t.t } ), p : p };
@@ -1071,26 +1283,19 @@ class Compiler {
 		case CInt:
 			// inline int(t) as t - frc(t)
 			if( config.inlInt ) {
-				if( !isFloat(e.t) )
+				if( !Tools.isFloat(e.t) )
 					unify(e.t, TFloat4, e.p); // force error
 				var v = allocTemp(e.t, p);
 				var ev = { d : CVar(v), t : e.t, p : p };
 				addAssign( ev, e, p);
-				var efrc = { d : CUnop(CFrac, e), t : e.t, p : p };
+				var efrc = { d : CUnop(CFrac, ev), t : e.t, p : p };
 				return { d : COp(CSub, ev, efrc), t : e.t, p : p };
 			}
 		default:
 		}
-		if( !isFloat(e.t) )
+		if( !Tools.isFloat(e.t) )
 			unify(e.t, TFloat4, e.p); // force error
 		return { d : CUnop(op, e), t : rt, p : p };
-	}
-
-	function isFloat( t : VarType ) {
-		return switch( t ) {
-		case TFloat, TFloat2, TFloat3, TFloat4, TInt: true;
-		default: false;
-		};
 	}
 
 	function isCompatible( t1 : VarType, t2 : VarType ) {

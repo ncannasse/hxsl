@@ -30,18 +30,16 @@ class Parser {
 	var vertex : Function;
 	var fragment : Function;
 	var helpers : Hash<Function>;
-	var input : Array<ParsedVar>;
 	var vars : Array<ParsedVar>;
 	var cur : ParsedCode;
 	var allowReturn : Bool;
 
 	public function new() {
 		helpers = new Hash();
-		input = [];
 		vars = [];
 	}
 
-	function error(msg:String, p) : Dynamic {
+	function error(msg:String, p:Position) : Dynamic {
 		throw new Error(msg, p);
 		return null;
 	}
@@ -56,7 +54,7 @@ class Parser {
 		}
 		if( vertex == null ) error("Missing vertex function", e.pos);
 		if( fragment == null ) error("Missing fragment function", e.pos);
-		if( input.length == 0 ) error("Missing input variable", e.pos);
+		if( !hasInput() ) error("Missing input variable", e.pos);
 		allowReturn = false;
 		var vs = buildShader(vertex);
 		var fs = buildShader(fragment);
@@ -64,7 +62,17 @@ class Parser {
 		allowReturn = true;
 		for( h in helpers.keys() )
 			help.set(h, buildShader(helpers.get(h)));
-		return { input : input, vertex : vs, fragment : fs, vars : vars, pos : e.pos, helpers : help };
+		return { vertex : vs, fragment : fs, vars : vars, pos : e.pos, helpers : help };
+	}
+
+	function hasInput() {
+		for ( v in vars )
+			switch(v.k) {
+			case VInput:
+				return true;
+			default:
+			}
+		return false;
 	}
 
 	public dynamic function includeFile( file : String ) : Null<Expr> {
@@ -95,6 +103,7 @@ class Parser {
 			if( p.pack.length > 0 || p.sub != null || p.params.length > 0 )
 				error("Unsupported type", pos);
 			return switch( p.name ) {
+			case "Bool": TBool;
 			case "Float": TFloat;
 			case "Float2": TFloat2;
 			case "Float3": TFloat3;
@@ -115,8 +124,46 @@ class Parser {
 		return null;
 	}
 
-	function allocVar( v, t, p ) : ParsedVar {
-		return { n : v, t : t == null ? null : getType(t, p), p : p };
+	function allocVarDecl( v, t, p ) : ParsedVar {
+		if( t != null )
+			switch( t ) {
+			case TPath(path):
+				if ( path.params.length == 1 ) {
+					switch (path.params[0]) {
+					case TPType(tt):
+						var v = allocVar(v, tt, getKindFromName(path.name, p), p);
+						// Texture types can only specify uniform kind
+						switch ( v.t ) {
+						case TTexture(_):
+							if( v.k != VGlobalParam )
+								error("Invalid kind for texture: " + v.n, p);
+							v.k = VGlobalTexture;
+						default:
+						}
+						return v;
+					default:
+					}
+				}
+			default:
+			}
+		// leave kind indeterminate until it is used.
+		return allocVar(v, t, null, p);
+	}
+
+	function allocVar( v, t, k, p ) : ParsedVar {
+		return { n : v, k : k, t : t == null ? null : getType(t, p), p : p };
+	}
+
+	function getKindFromName( name:String, p ) {
+		switch ( name ) {
+		case "Input": return VInput;
+		case "Varying": return VVar;
+		case "Param": return VGlobalParam;
+		case "Constant":return VCompileConstant;
+		default:
+			error("Unrecognized kind: " + name, p);
+			return null;
+		}
 	}
 
 	function parseDecl( e : Expr ) {
@@ -130,13 +177,13 @@ class Parser {
 					case TAnonymous(fl):
 						for( f in fl )
 							switch( f.kind ) {
-							case FVar(t,_): input.push(allocVar(f.name,t,p));
-							default: error("Invalid input variable type", p);
+							case FVar(t,_): vars.push(allocVar(f.name,t,VInput,p));
+							default: error("Invalid input variable type",p);
 							}
 					default: error("Invalid type for shader input : should be anonymous", p);
 					}
 				else
-					vars.push(allocVar(v.name, v.type, p));
+					vars.push(allocVarDecl(v.name, v.type, p));
 			}
 			return;
 		case EFunction(name,f):
@@ -194,7 +241,7 @@ class Parser {
 		for( p in f.args ) {
 			if( p.type == null ) error("Missing parameter type '" + p.name + "'", pos);
 			if( p.value != null ) error("Unsupported default value", p.value.pos);
-			cur.args.push(allocVar(p.name, p.type, pos));
+			cur.args.push(allocVar(p.name, p.type, VParam, pos));
 		}
 		parseExpr(f.expr);
 		return cur;
@@ -219,6 +266,22 @@ class Parser {
 			allowReturn = old;
 			eold.push({ v : null, e : { v : PBlock(cur.exprs), p : e.pos }, p : e.pos });
 			cur.exprs = eold;
+		case EIf(cond, eif, eelse):
+			var pcond = parseValue(cond);
+
+			var eold = cur.exprs;
+			cur.exprs = [];
+			parseExpr(eif);
+			var pif = cur.exprs;
+
+			var pelse = null;
+			if ( eelse != null ) {
+				cur.exprs = [];
+				parseExpr(eelse);
+				pelse = cur.exprs;
+			}
+			cur.exprs = eold;
+			cur.exprs.push( {v:null, e: { v:PIf(pcond, pif, pelse), p : e.pos }, p : e.pos} );
 		case EBinop(op, e1, e2):
 			switch( op ) {
 			case OpAssign:
@@ -232,7 +295,7 @@ class Parser {
 			for( v in vl ) {
 				if( v.expr == null && v.type == null )
 					error("Missing type for variable '" + v.name + "'", e.pos);
-				var l = { v : PLocal(allocVar(v.name, v.type, e.pos)), p : e.pos };
+				var l = { v : PLocal(allocVar(v.name, v.type, VTmp, e.pos)), p : e.pos };
 				cur.exprs.push( { v : l, e : v.expr == null ? null : parseValue(v.expr), p : e.pos } );
 			}
 		case ECall(v, params):
@@ -251,7 +314,7 @@ class Parser {
 			}
 			error("Unsupported call", e.pos);
 		case EFor(it, expr):
-			var min : Null<Int> = null, max : Null<Int> = null, vname : String = null;
+			var min = null, max = null, vname = null;
 			switch( it.expr ) {
 			case EIn(v,it):
 				switch( v.expr ) {
@@ -265,19 +328,21 @@ class Parser {
 				switch( it.expr ) {
 				case EBinop(op, e1, e2):
 					if( op == OpInterval ) {
-						min = parseInt(e1);
-						max = parseInt(e2);
+						min = parseValue(e1);
+						max = parseValue(e2);
 					}
 				default:
 				}
 			default:
 			}
 			if( min == null || max == null || vname == null )
-				error("For iterator should be in the form 1...5", it.pos);
-			for( i in min...max ) {
-				var expr = replaceVar(vname, EConst(Constant.CInt(Std.string(i))), expr);
-				parseExpr(expr);
-			}
+				error("For iterator should be in the form x...y", it.pos);
+
+			var len = cur.exprs.length;
+			parseExpr(expr);
+			if ( cur.exprs.length != len+1 ) error("Multiple for expressions ?",e.pos);
+			var itvar = {n:vname, t:TFloat, k:VTmp, p:it.pos};
+			cur.exprs.push( {v : null, e:{v:PFor(itvar, min, max, cur.exprs.pop()), p:e.pos}, p:e.pos } );
 		case EReturn(r):
 			if( r == null ) error("Return must return a value", e.pos);
 			if( !allowReturn ) error("Return only allowed as final expression in helper methods", e.pos);
@@ -306,7 +371,10 @@ class Parser {
 		case EConst(c):
 			switch( c ) {
 			case CType(i), CIdent(i):
-				return { v : PVar(i), p : e.pos };
+				if( i == "null" || i == "true" || i == "false" )
+					return { v : PConst(i), p : e.pos };
+				else
+					return { v : PVar(i), p : e.pos };
 			case CInt(v):
 				return { v : PConst(v), p : e.pos };
 			case CFloat(f):
@@ -326,12 +394,18 @@ class Parser {
 			case OpNotEq: "neq";
 			case OpGte: "gte";
 			case OpMod: "mod";
+			case OpBoolOr: "or";
+			case OpBoolAnd: "and";
 			default: error("Unsupported operation", e.pos);
 			};
 			return makeCall(op, [e1, e2], e.pos);
 		case EUnop(op, _, e1):
-			if( op == OpNeg )
-				return makeCall("neg", [e1], e.pos);
+			var op = switch( op ) {
+			case OpNeg: "neg";
+			case OpNot: "not";
+			default: error("Unsupported operation", e.pos);
+			}
+			return makeCall(op, [e1], e.pos);
 		case ECall(c, params):
 			switch( c.expr ) {
 			case EField(v, f):
@@ -358,7 +432,7 @@ class Parser {
 			var vif = parseValue(eif);
 			if( eelse == null ) error("'if' needs an 'else'", e.pos);
 			var velse = parseValue(eelse);
-			return { v : PIf(vcond, vif, velse), p : e.pos };
+			return { v : PIff(vcond, vif, velse), p : e.pos };
 		case EArray(e1, e2):
 			var e1 = parseValue(e1);
 			var e2 = parseValue(e2);
@@ -447,6 +521,69 @@ class Parser {
 		return { v : POp(op, e1, e2), p : p };
 	}
 
+	function checkTextureFlagDups(flags:Array<ParsedExpr>) {
+		var hasMip = false;
+		var hasWrap = false;
+		var hasFilter = false;
+		var hasSingle = false;
+		var hasLodBias = false;
+		for ( expr in flags ) {
+			if ( expr.v == null ) {
+				switch ( expr.e.v ) {
+				case PConst(s):
+					switch ( s ) {
+					case "mm_no", "mm_near", "mm_linear":
+						if( hasMip )
+							error("Duplicate or conflicting mipmap flag: " + s, expr.p);
+						hasMip = true;
+					case "wrap", "clamp":
+						if( hasWrap )
+							error("Duplicate or conflicting wrap/clamp flag: " + s, expr.p);
+						hasWrap = true;
+					case "nearest", "linear":
+						if( hasFilter )
+							error("Duplicate or conflicting filter flag: " + s, expr.p);
+						hasFilter = true;
+					case "single":
+						if( hasSingle )
+							error("Duplicate or conflicting single flag: " + s, expr.p);
+						hasSingle = true;
+					default: throw "assert";
+					}
+				default: throw "assert";
+				}
+			} else {
+				switch ( expr.v.v ) {
+				case PConst(s):
+					switch (s) {
+					case "lod":
+						if( hasLodBias )
+							error("Duplicate or conflicting lod flag: " + s, expr.p);
+						hasLodBias = true;
+					case "mipmap":
+						if( hasMip )
+							error("Duplicate or conflicting mipmap flag: " + s, expr.p);
+						hasMip = true;
+					case "wrap", "clamp":
+						if( hasWrap )
+							error("Duplicate or conflicting wrap/clamp flag: " + s, expr.p);
+						hasWrap = true;
+					case "filter":
+						if( hasFilter )
+							error("Duplicate or conflicting filter flag: " + s, expr.p);
+						hasFilter = true;
+					case "single":
+						if( hasSingle )
+							error("Duplicate or conflicting single flag: " + s, expr.p);
+						hasSingle = true;
+					default: throw "assert";
+					}
+				default: throw "assert";
+				}
+			}
+		}
+	}
+
 	function makeCall( n : String, params : Array<Expr>, p : Position ) {
 
 		if( helpers.exists(n) ) {
@@ -465,31 +602,37 @@ class Parser {
 			};
 			var t = parseValue(params.shift());
 			var flags = [];
-			var idents = ["mm_no","mm_near","mm_linear","wrap","clamp","nearest","linear","single","lod(v)"];
+			var idents = ["mm_no","mm_near","mm_linear","wrap","clamp","nearest","linear","single","lod(x)"];
 			var values = [TMipMapDisable,TMipMapNearest,TMipMapLinear,TWrap,TClamp,TFilterNearest,TFilterLinear,TSingle];
+			var targets = ["mipmap", "wrap", "clamp", "filter", "lod"];
+			var targetValues = [PMipMap, PWrap, PClamp, PFilter, PLodBias];
 			for( p in params ) {
 				switch( p.expr ) {
+				case EBinop(op, e1, e2):
+					switch ( op ) {
+					case OpAssign:
+						switch (e1.expr) {
+						case EConst(c):
+							switch (c) {
+							case CIdent(sflag):
+								var ip = Lambda.indexOf(targets, sflag);
+								if ( ip >= 0 ) {
+									flags.push( {v:{v:PConst(sflag), p:e1.pos}, e:parseValue(e2), p:p.pos} );
+									continue;
+								}
+								error("Invalid parameter, should be "+targets.join("|"), p.pos);
+							default:
+							}
+						default: error("Invalid syntax for texture get", p.pos);
+						}
+					default: error("Invalid syntax for texture get", p.pos);
+					}
 				case EConst(c):
 					switch( c ) {
 					case CIdent(sflag):
 						var ip = Lambda.indexOf(idents, sflag);
 						if( ip >= 0 ) {
-							var v = values[ip];
-							var sim = switch( v ) {
-							case TMipMapDisable, TMipMapLinear, TMipMapNearest: [TMipMapDisable, TMipMapLinear, TMipMapNearest];
-							case TClamp, TWrap: [TClamp, TWrap];
-							case TFilterLinear, TFilterNearest: [TFilterLinear, TFilterNearest];
-							case TSingle: [TSingle];
-							case TLodBias(_): [];
-							}
-							for( s in sim )
-								if( flags.remove(s) ) {
-									if( s == v )
-										error("Duplicate texture flag", p.pos);
-									else
-										error("Conflicting texture flags " + idents[Lambda.indexOf(values, s)] + " and " + sflag, p.pos);
-								}
-							flags.push(v);
+							flags.push( {v:null, e:{v:PConst(sflag), p:p.pos}, p:p.pos} );
 							continue;
 						}
 					default:
@@ -504,7 +647,7 @@ class Parser {
 								case EConst(c):
 									switch( c ) {
 									case CInt(v), CFloat(v):
-										flags.push(TLodBias(Std.parseFloat(v)));
+										flags.push( { v : {v : PConst("lod"), p : p.pos}, e : parseValue(pl[0]), p : p.pos } );
 										continue;
 									default:
 									}
@@ -519,6 +662,8 @@ class Parser {
 				}
 				error("Invalid parameter, should be "+idents.join("|"), p.pos);
 			}
+
+			checkTextureFlagDups(flags);
 			return { v : PTex(v, t, flags), p : p };
 		}
 		// build operation
@@ -565,7 +710,9 @@ class Parser {
 		case "lte", "sle": checkParams(2); return makeOp(CGte, v[1], v[0], p);
 		case "eq", "seq": checkParams(2); return makeOp(CEq, v[1], v[0], p);
 		case "neq", "sne": checkParams(2); return makeOp(CNeq, v[1], v[0], p);
-
+		case "or": checkParams(2); return makeOp(COr, v[0], v[1], p);
+		case "and": checkParams(2); return makeOp(CAnd, v[0], v[1], p);
+		case "not": checkParams(1); return makeUnop(CNot, v[0], p);
 		default:
 		}
 		return error("Unknown operation '" + n + "'", p);
