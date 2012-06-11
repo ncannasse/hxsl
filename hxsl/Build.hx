@@ -159,10 +159,9 @@ class Build {
 		var c = new Compiler();
 		c.warn = Context.warning;
 		var v = try c.compile(v) catch( e : Error ) haxe.macro.Context.error(e.message, e.pos);
-		
-		for( v in v.vars )
-			trace(v);
-		
+
+		v = new RuntimeCompiler().compile(v, { } );
+
 		var c = new hxsl.AgalCompiler();
 		c.error = Context.error;
 
@@ -182,7 +181,7 @@ class Build {
 		var o = new haxe.io.BytesOutput();
 		new format.agal.Writer(o).write(fscode);
 		var fsbytes = haxe.Serializer.run(o.getBytes());
-		
+
 		var vs = buildShaderInfos(v.vertex);
 		var fs = buildShaderInfos(v.fragment);
 
