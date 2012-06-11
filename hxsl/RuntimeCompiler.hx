@@ -59,8 +59,10 @@ class RuntimeCompiler
 		if( compileValues != null ) {
 			for ( c in Reflect.fields(compileValues) ) {
 				var vr = _compileVars.get(c);
-				if( vr == null )
-					error("Unsupported compilation var: " + c, {file:"", min:0, max:0});
+				if( vr == null ) {
+					var pos = { file:"", min:0, max:0 };
+					error("Unsupported compilation var: " + c, #if macro haxe.macro.Context.makePosition(pos) #else pos #end);
+				}
 				this.compileValues.set(c, convertCompileVar(Reflect.field(compileValues, c), vr));
 			}
 		}
@@ -103,8 +105,10 @@ class RuntimeCompiler
 		case TFloat2:
 			if ( val == null ) {
 				return [0.0, 0.0];
+			#if flash
 			} else if ( Std.is(val, flash.geom.Vector3D) ) {
 				return [val.x, val.y];
+			#end
 			} else if ( Std.is(val, Array) ) {
 				var aval:Array<Float> = cast val;
 				if ( aval.length != 2 ) error("Expected Float2 for compile var: " + v.name, v.pos);
@@ -115,8 +119,10 @@ class RuntimeCompiler
 		case TFloat3:
 			if ( val == null ) {
 				return [0.0, 0.0, 0.0];
+			#if flash
 			} else if ( Std.is(val, flash.geom.Vector3D) ) {
 				return [val.x, val.y, val.z];
+			#end
 			} else if ( Std.is(val, Array) ) {
 				var aval:Array<Float> = cast val;
 				if ( aval.length != 3 ) error("Expected Float3 for compile var: " + v.name, v.pos);
@@ -127,8 +133,10 @@ class RuntimeCompiler
 		case TFloat4:
 			if ( val == null ) {
 				return [0.0, 0.0, 0.0, 0.0];
+			#if flash
 			} else if ( Std.is(val, flash.geom.Vector3D) ) {
 				return [val.x, val.y, val.z, val.w];
+			#end
 			} else if ( Std.is(val, Array) ) {
 				var aval:Array<Float> = cast val;
 				if ( aval.length != 4 ) error("Expected Float4 for compile var: " + v.name, v.pos);
