@@ -515,9 +515,13 @@ class RuntimeCompiler
 		case CVar(vr, swiz):
 			vr = processVar(vr);
 			if ( vr.assign != null ) {
-				vr.read = true;
-				swiz = (swiz != null) ? mergeSwiz(vr.assign.s, swiz) : vr.assign.s;
-				vr = vr.assign.v;
+        // FIX: Do not follow assignments from varying to input in pixel shader
+        var allowAssign = (vr.assign.v.kind == VInput) ? (cur.vertex || vr.kind != VVar) : true;
+        if ( allowAssign ) {
+          vr.read = true;
+          swiz = (swiz != null) ? mergeSwiz(vr.assign.s, swiz) : vr.assign.s;
+          vr = vr.assign.v;
+        }
 			}
 			vr = checkRead(vr, swiz, e.p);
 			return { d : CVar(vr, swiz), t : e.t, p : e.p };
