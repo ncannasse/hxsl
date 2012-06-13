@@ -29,6 +29,7 @@ class Compiler {
 	var cur : Code;
 	var allVars : Array<Variable>;
 	var scopeVars : Hash<Variable>;
+	var globalVars : Hash<Variable>; 
 	var ops : Array<Array<{ p1 : VarType, p2 : VarType, r : VarType }>>;
 	var tempCount : Int;
 	var helpers : Hash<Data.ParsedCode>;
@@ -106,16 +107,18 @@ class Compiler {
 	public function compile( h : ParsedHxsl ) : Data {
 		allVars = [];
 		iterators = new IntHash();
-		allocVar("out", VOut, TFloat4, h.pos);
+		globalVars = new Hash();
+		
+		globalVars.set("out", allocVar("out", VOut, TFloat4, h.pos));
 
 		helpers = h.helpers;
 		for ( v in h.vars ) {
 			var k = v.k;
 			switch ( v.t ) {
-			case TTexture(_): k = VGlobalTexture;
+			case TTexture(_): k = VTexture;
 			default:
 			}
-			allocVar(v.n, k, v.t, v.p);
+			globalVars.set( v.n, allocVar(v.n, k, v.t, v.p) );
 		}
 
 		var vertex = compileShader(h.vertex,true);
@@ -146,13 +149,13 @@ class Compiler {
 			tempSize : 0,
 		};
 		globalsRead = new Hash();
+		scopeVars = cloneVars(globalVars);
 
 		for( v in c.args ) {
 			switch( v.t ) {
 			case TTexture(_):
 				if( cur.vertex ) error("You can't use a texture inside a vertex shader", v.p);
 				var tex = allocVar(v.n, VTexture, v.t, v.p);
-				globalsRead.set(tex.name, tex);
 				cur.tex.push(tex);
 			default:
 				cur.args.push(allocVar(v.n, VParam, v.t, v.p));
@@ -164,25 +167,13 @@ class Compiler {
 
 		checkLocalVars();
 
-		// cleanup
-		var old = scopeVars;
-		scopeVars = new Hash();
-		for( v in old ) {
-			if ( v.kind == null ) {
-				scopeVars.set(v.name, v);
-			} else switch( v.kind ) {
-			case VParam, VTmp:
-			default: scopeVars.set(v.name, v);
-			}
-		}
-
 		return cur;
 	}
 
-	function saveVars() {
+	function cloneVars(vars:Hash<Variable>) {
 		var old = new Hash();
-		for( v in scopeVars.keys() )
-			old.set(v, scopeVars.get(v));
+		for( v in vars.keys() )
+			old.set(v, vars.get(v));
 		return old;
 	}
 
@@ -197,7 +188,7 @@ class Compiler {
 		if( v == null ) {
 			switch( e.v ) {
 			case PBlock(el):
-				var old = saveVars();
+				var old = cloneVars(scopeVars);
 				for( e in el )
 					compileAssign(e.v, e.e, e.p);
 				closeBlock(old);
@@ -211,7 +202,7 @@ class Compiler {
 				checkRead(lastc);
 				inConstantExpr = false;
 
-				var savedVars = saveVars();
+				var savedVars = cloneVars(scopeVars);
 				var savedExprs = cur.exprs;
 				cur.exprs = [];
 
@@ -221,7 +212,7 @@ class Compiler {
 				compileAssign(expr.v, expr.e, expr.p);
 				iterators.remove(itc.id);
 
-				savedExprs.push( { v : null, e : {d:CFor(itc, firstc, lastc, cur.exprs), t:null, p:p} } );
+				savedExprs.push( { v : null, e : {d:CFor(itc, firstc, lastc, cur.exprs), t:TBool, p:p} } );
 
 				scopeVars = savedVars;
 				cur.exprs = savedExprs;
@@ -261,7 +252,7 @@ class Compiler {
 						elseexpr = cur.exprs;
 					}
 					cur.exprs = old;
-					cur.exprs.push( {v : null, e : {d:CIf(ccond, ifexpr, elseexpr), t:null, p:p}} );
+					cur.exprs.push( {v : null, e : {d:CIf(ccond, ifexpr, elseexpr), t:TBool, p:p}} );
 				}
 				return;
 			case PReturn(v):
@@ -316,7 +307,7 @@ class Compiler {
 			case VVar:
 				if( !cur.vertex ) error("You can't write a variable in fragment shader", v.p);
 				vr.write |= bits;
-			case VParam, VGlobalParam:
+			case VParam:
 				error("Constant values cannot be written", v.p);
 			case VCompileConstant:
 				error("Compile constants cannot be written", v.p);
@@ -327,7 +318,7 @@ class Compiler {
 				vr.write |= bits;
 			case VTmp:
 				vr.write |= bits;
-			case VTexture, VGlobalTexture:
+			case VTexture:
 				error("You can't write to a texture", v.p);
 			}
 			if( swiz != null ) {
@@ -358,7 +349,7 @@ class Compiler {
 			index : 0,
 			pos : p,
 			read : false,
-			write : if( k == null ) 0 else switch( k ) { case VInput, VParam, VGlobalParam: Tools.fullBits(t); default: 0; },
+			write : if( k == null ) 0 else switch( k ) { case VInput, VParam: Tools.fullBits(t); default: 0; },
 			assign : null,
 		};
 		allVars.push(v);
@@ -381,7 +372,7 @@ class Compiler {
 
 			v.kind = k;
 			v.kindInferred = true;
-			v.write = switch(k) { case VInput, VParam, VGlobalParam: Tools.fullBits(v.type); default: 0; }
+			v.write = switch(k) { case VInput, VParam: Tools.fullBits(v.type); default: 0; }
 		}
 	}
 
@@ -429,7 +420,7 @@ class Compiler {
 	}
 
 	function checkGlobalVars(vertex, fragment) {
-		for ( v in scopeVars ) {
+		for ( v in globalVars ) {
 			var p = v.pos;
 
 			if ( v.kind == null ) {
@@ -438,7 +429,7 @@ class Compiler {
 			}
 
 			switch ( v.kind ) {
-			case VGlobalParam:
+			case VParam:
 				if ( !v.read ) warn("Uniform variable '" + v.name + "' is not used.", p);
 			case VCompileConstant:
 				if ( !v.read ) warn("Compile constant '" + v.name + "' is not used.", p);
@@ -451,7 +442,8 @@ class Compiler {
 						addAssign( { d : CVar(allocTemp(TFloat4, p)), t : TFloat4, p : p }, { d : CVar(v), t : TFloat4, p : p }, p);
 					}
 				}
-			case VVar, VOut, VTexture, VGlobalTexture:
+			case VVar, VTexture, VOut:
+				// checked in checkLocalVars
 			default:
 				throw "assert";
 			}
@@ -490,8 +482,8 @@ class Compiler {
 			case VTmp:
 				if( !v.read ) warn("Unused local variable '" + v.name+"'", p);
 			case VParam:
-				if( !v.read ) warn("Parameter '" + v.name + "' not used by " + shader, p);
-			case VTexture, VGlobalTexture:
+				if( !globalVars.exists(v.name) && !v.read ) warn("Parameter '" + v.name + "' not used by " + shader, p);
+			case VTexture:
 				if( !cur.vertex && !v.read ) {
 					warn("Unused texture " + v.name, p);
 					if( config.forceReads ) {
@@ -504,7 +496,7 @@ class Compiler {
 						addAssign(t, { d : CTex(v,allocConst(cst,p),[]), t : TFloat4, p : p }, p);
 					}
 				}
-			case VGlobalParam, VCompileConstant, VInput:
+			case VCompileConstant, VInput:
 				// checked in checkGlobalVars
 			}
 		}
@@ -526,10 +518,10 @@ class Compiler {
 
 	function checkReadVar( v : Variable, swiz, p ) {
 		// If this is within a conditional, interpret as a compile constant, otherwise a uniform.
-		inferKind(v, inConstantExpr ? VCompileConstant : VGlobalParam, p);
+		inferKind(v, inConstantExpr ? VCompileConstant : VParam, p);
 
 		if ( inConstantExpr ) {
-			if ( v.kind == VGlobalParam && v.kindInferred ) {
+			if ( v.kind == VParam && globalVars.exists(v.name) && v.kindInferred ) {
 				// Re-infer Uniform --> CompileConstant
 				if ( !v.read ) throw "assert";
 				checkTypeForKind(v.type, VCompileConstant, p);
@@ -555,10 +547,9 @@ class Compiler {
 				}
 			case VOut: error("Output cannot be read", p);
 			case VVar: if( cur.vertex ) error("You cannot read variable in vertex shader", p); v.read = true;
-			case VParam: v.read = true;
-			case VGlobalParam:
+			case VParam: 
 				v.read = true;
-				if ( !globalsRead.exists(v.name) ) {
+				if ( globalVars.exists(v.name) && !globalsRead.exists(v.name) ) {
 					globalsRead.set(v.name, v);
 					cur.args.push(v);
 				}
@@ -569,7 +560,7 @@ class Compiler {
 				v.read = true;
 			case VInput:
 				v.read = true;
-			case VTexture, VGlobalTexture:
+			case VTexture:
 				if( !allowTextureRead )
 					error("You can't read from a texture", p);
 			}
@@ -873,7 +864,7 @@ class Compiler {
 
 			switch( v.type ) {
 			case TTexture(cube):
-				if ( !globalsRead.exists(v.name) ) {
+				if ( globalVars.exists(v.name) && !globalsRead.exists(v.name) ) {
 					globalsRead.set(v.name, v);
 					cur.tex.push(v);
 				}
@@ -915,15 +906,10 @@ class Compiler {
 				vals.push(compileValue(v));
 			allowTextureRead = false;
 			if( h.args.length != vl.length ) error("Function " + n + " requires " + h.args.length + " arguments", e.p);
-			var old = saveVars();
+			var old = cloneVars(scopeVars);
 			// only allow access to globals/output from within our helper functions
-			for( v in old )
-				if ( v.kind != null ) {
-					switch( v.kind ) {
-					case VTmp, VTexture, VParam: scopeVars.remove(v.name);
-					case VOut, VInput, VVar, VGlobalParam, VGlobalTexture, VCompileConstant:
-					}
-				}
+			scopeVars = cloneVars(globalVars);
+
 			// init args
 			for( i in 0...h.args.length ) {
 				var value = vals[i];

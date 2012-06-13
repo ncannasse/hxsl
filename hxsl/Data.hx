@@ -62,8 +62,6 @@ enum VarKind {
 	VTexture;
 	// internal-usage only
 	VCompileConstant;
-	VGlobalTexture;
-	VGlobalParam;
 }
 
 enum VarType {

@@ -135,9 +135,9 @@ class Parser {
 						// Texture types can only specify uniform kind
 						switch ( v.t ) {
 						case TTexture(_):
-							if( v.k != VGlobalParam )
+							if( v.k != VParam )
 								error("Invalid kind for texture: " + v.n, p);
-							v.k = VGlobalTexture;
+							v.k = VTexture;
 						default:
 						}
 						return v;
@@ -158,7 +158,7 @@ class Parser {
 		switch ( name ) {
 		case "Input": return VInput;
 		case "Varying": return VVar;
-		case "Param": return VGlobalParam;
+		case "Param": return VParam;
 		case "Constant":return VCompileConstant;
 		default:
 			error("Unrecognized kind: " + name, p);

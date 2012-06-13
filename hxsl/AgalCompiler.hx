@@ -86,7 +86,7 @@ class AgalCompiler {
 		case VTmp: RTemp;
 		case VVar: RVar;
 		case VInput: RAttr;
-		case VGlobalTexture, VTexture, VGlobalParam, VCompileConstant: throw "assert";
+		case VTexture, VCompileConstant: throw "assert";
 		}
 		return { t : t, index : v.index, swiz : swiz, access : null };
 	}

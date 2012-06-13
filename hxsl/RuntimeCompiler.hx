@@ -515,13 +515,13 @@ class RuntimeCompiler
 		case CVar(vr, swiz):
 			vr = processVar(vr);
 			if ( vr.assign != null ) {
-        // FIX: Do not follow assignments from varying to input in pixel shader
-        var allowAssign = (vr.assign.v.kind == VInput) ? (cur.vertex || vr.kind != VVar) : true;
-        if ( allowAssign ) {
-          vr.read = true;
-          swiz = (swiz != null) ? mergeSwiz(vr.assign.s, swiz) : vr.assign.s;
-          vr = vr.assign.v;
-        }
+				// FIX: Do not follow assignments from varying to input in pixel shader
+				var allowAssign = (vr.assign.v.kind == VInput) ? (cur.vertex || vr.kind != VVar) : true;
+				if ( allowAssign ) {
+					vr.read = true;
+					swiz = (swiz != null) ? mergeSwiz(vr.assign.s, swiz) : vr.assign.s;
+					vr = vr.assign.v;
+				}
 			}
 			vr = checkRead(vr, swiz, e.p);
 			return { d : CVar(vr, swiz), t : e.t, p : e.p };
@@ -864,14 +864,8 @@ class RuntimeCompiler
 
 
 	function getUsedVar(v : Variable) : Variable {
-		var kind = switch(v.kind) {
-		case VGlobalParam: VParam;
-		case VGlobalTexture: VTexture;
-		default: v.kind;
-		}
-
-		var ikind = Type.enumIndex(kind);
-		return vars[Type.enumIndex(kind)].get(v.id);
+		var ikind = Type.enumIndex(v.kind);
+		return vars[Type.enumIndex(v.kind)].get(v.id);
 	}
 
 	function reindexVar(v : Variable, index:Int ) {
@@ -889,8 +883,7 @@ class RuntimeCompiler
 
 	function processVar(v : Variable) : Variable {
 		var kind = switch(v.kind) {
-		case VGlobalParam, VCompileConstant: VParam;
-		case VGlobalTexture: VTexture;
+		case VCompileConstant: VParam;
 		default: v.kind;
 		}
 
@@ -1011,7 +1004,7 @@ class RuntimeCompiler
 			kind : VParam,
 			kindInferred : false,
 			type : TFloat4,
-			id : id++,
+			id : id,
 			index : index, // offset later
 			refId : -1,
 			pos : p,
