@@ -1,5 +1,7 @@
 package test;
 import haxe.macro.Expr;
+import hxsl.Unserialize;
+import hxsl.Serialize;
 #if macro
 import haxe.macro.Context;
 #end
@@ -14,27 +16,36 @@ class Main {
 		return lines.join("\n");
 	}
 	
+	static function agalToBytes( c : format.agal.Data ) {
+		var o = new haxe.io.BytesOutput();
+		new format.agal.Writer(o).write(c);
+		return o.getBytes();
+	}
+	
 	static function compileShader( shader : Expr, params : {} ) {
 		var p = new hxsl.Parser().parse(shader);
 		var data = new hxsl.Compiler().compile(p);
 		data = new hxsl.RuntimeCompiler().compile(data, params);
 		var vert = new hxsl.AgalCompiler().compile(data.vertex);
 		var frag = new hxsl.AgalCompiler().compile(data.fragment);
-		return agalToString(vert) + "\n\n" + agalToString(frag);
+		var vexpr = { expr : EConst(CString(haxe.Serializer.run(agalToBytes(vert)))), pos : shader.pos };
+		var fexpr = { expr : EConst(CString(haxe.Serializer.run(agalToBytes(frag)))), pos : shader.pos };
+		var chk = macro testRuntimeShader($vexpr,$fexpr);
+		return { str : agalToString(vert) + "\n\n" + agalToString(frag), chk : chk };
 	}
 	#end
 	
 	@:macro static function test( shader : Expr, out : String, ?params : { } ) {
-		var str = null;
+		var s = null;
 		try {
-			str = compileShader(shader, params);
+			s = compileShader(shader, params);
 		} catch( e : hxsl.Data.Error ) {
 			Context.error(e.message, e.pos);
 		}
 		var out = StringTools.trim(out.split("\r\n").join("\n").split("\t").join(""));
-		if( str != out )
-			Context.error("Wrong AGAL output :\n" + str, shader.pos);
-		return { expr : EBlock([]), pos : shader.pos };
+		if( s.str != out )
+			Context.error("Wrong AGAL output :\n" + s.str, shader.pos);
+		return s.chk;
 	}
 	
 	@:macro static function error( shader : Expr, msg : String, ?params : { } ) {
@@ -47,9 +58,25 @@ class Main {
 		return { expr : EBlock([]), pos : shader.pos };
 	}
 	
-	
 	#if !macro
-	static function main() {
+
+	static function stringToBytes( str : String ) {
+		var bytes : haxe.io.Bytes = haxe.Unserializer.run(str);
+		var bytes = bytes.getData();
+		bytes.endian = flash.utils.Endian.LITTLE_ENDIAN;
+		return bytes;
+	}
+	
+	static function testRuntimeShader( vertex : String, fragment : String ) {
+		var p = ctx.createProgram();
+		p.upload(stringToBytes(vertex), stringToBytes(fragment));
+		p.dispose();
+	}
+
+	static function checkShaders() {
+		
+		
+		// basic shader
 		test({
 			var input : {
 				pos : Float3,
@@ -73,17 +100,18 @@ class Main {
 			mov out, t0
 		");
 		
+		// check that we can read all from a varying
 		test( {
 			var input : {
 				pos : Float3,
 			};
-			var color : Float4;
+			var color : Float3;
 			function vertex( mpos : M44, mproj : M44 ) {
 				out = pos.xyzw * mpos * mproj;
-				color = pos.xyzw;
+				color = pos;
 			}
 			function fragment() {
-				out = color;
+				out = color.xyzw;
 			}
 		},"
 			m44 t0, a0.xyzw, c0
@@ -91,9 +119,29 @@ class Main {
 			dp4 out.y, t0, c5
 			dp4 out.z, t0, c6
 			dp4 out.w, t0, c7
-			mov v0, a0.xyzw
+			mov v0, a0
 			
-			mov out, v0
+			mov out, v0.xyzw
+		");
+		
+		// check that we correcly perform additional reads on inputs/textures
+		// even if runtime shader skip some reads
+		test( {
+			var input : {
+				pos : Float3,
+				n : Float3,
+			};
+			var flag : Bool;
+			function vertex() {
+				out = pos.xyzw + (flag ? n.xyzw : [0,0,0,0]);
+			}
+			function fragment( tex : Texture ) {
+				out = (flag ? tex.get(pos.xy) : [0,0,0,0]);
+			}
+		},"
+			mov out, pos
+			
+			mov out, c0
 		");
 		
 		
@@ -144,6 +192,17 @@ class Main {
 			}
 		},"Unknown variable 'xpos'");
 				
+	}
+	
+	static var ctx : flash.display3D.Context3D;
+		
+	static function main() {
+		var stage = flash.Lib.current.stage.stage3Ds[0];
+		stage.addEventListener(flash.events.Event.CONTEXT3D_CREATE, function(_) {
+			ctx = stage.context3D;
+			checkShaders();
+		});
+		stage.requestContext3D();
 	}
 	#end
 	

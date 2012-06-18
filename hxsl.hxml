@@ -4,3 +4,4 @@
 -swf-version 11
 -main test.Main
 -lib format
+-D haxe3
