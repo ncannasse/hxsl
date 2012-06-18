@@ -98,21 +98,24 @@ class RuntimeCompiler
 			return [val ? 1.0 : 0.0];
 		case TInt:
 			if ( !Std.is(val, Int) ) error("Expected int for compile var: " + v.name, v.pos);
-			return [val];
+			var val : Int = val;
+			return [val * 1.0];
 		case TFloat:
 			if ( !Std.is(val, Float) ) error("Expected float for compile var: " + v.name, v.pos);
+			var val : Float = val;
 			return [val];
 		case TFloat2:
 			if ( val == null ) {
 				return [0.0, 0.0];
 			#if flash
 			} else if ( Std.is(val, flash.geom.Vector3D) ) {
+				var val : flash.geom.Vector3D = val;
 				return [val.x, val.y];
 			#end
 			} else if ( Std.is(val, Array) ) {
-				var aval:Array<Float> = cast val;
-				if ( aval.length != 2 ) error("Expected Float2 for compile var: " + v.name, v.pos);
-				return aval;
+				var val:Array<Float> = val;
+				if ( val.length != 2 ) error("Expected Float2 for compile var: " + v.name, v.pos);
+				return val;
 			} else {
 				error("Bad input for compile var: " + v.name, v.pos);
 			}
@@ -121,12 +124,13 @@ class RuntimeCompiler
 				return [0.0, 0.0, 0.0];
 			#if flash
 			} else if ( Std.is(val, flash.geom.Vector3D) ) {
+				var val : flash.geom.Vector3D = val;
 				return [val.x, val.y, val.z];
 			#end
 			} else if ( Std.is(val, Array) ) {
-				var aval:Array<Float> = cast val;
-				if ( aval.length != 3 ) error("Expected Float3 for compile var: " + v.name, v.pos);
-				return aval;
+				var val:Array<Float> = val;
+				if ( val.length != 3 ) error("Expected Float3 for compile var: " + v.name, v.pos);
+				return val;
 			} else {
 				error("Bad input for compile var: " + v.name, v.pos);
 			}
@@ -135,12 +139,13 @@ class RuntimeCompiler
 				return [0.0, 0.0, 0.0, 0.0];
 			#if flash
 			} else if ( Std.is(val, flash.geom.Vector3D) ) {
+				var val : flash.geom.Vector3D = val;
 				return [val.x, val.y, val.z, val.w];
 			#end
 			} else if ( Std.is(val, Array) ) {
-				var aval:Array<Float> = cast val;
-				if ( aval.length != 4 ) error("Expected Float4 for compile var: " + v.name, v.pos);
-				return aval;
+				var val:Array<Float> = val;
+				if ( val.length != 4 ) error("Expected Float4 for compile var: " + v.name, v.pos);
+				return val;
 			} else {
 				error("Bad input for compile var: " + v.name, v.pos);
 			}
@@ -848,7 +853,7 @@ class RuntimeCompiler
 			missing.push(Type.createEnumIndex(Comp, i));
 			ones.push(1.0);
 		}
-		
+
 		var c = allocConst(ones, v.pos);
 		vertex.exprs.push( { v : { d : CVar(v, missing), t : Tools.makeFloat(missing.length), p : v.pos }, e : c } );
 	}

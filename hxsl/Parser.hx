@@ -509,7 +509,11 @@ class Parser {
 		case EWhile(_), EUntyped(_), ETry(_), EThrow(_), ESwitch(_), EReturn(_), EObjectDecl(_), ENew(_), EFunction(_), EDisplay(_), EDisplayNew(_), EContinue, ECast(_), EBreak:
 			e.expr;
 		case ECheckType(e,t):
-			ECheckType(replaceVar(v, by, e),t);
+			ECheckType(replaceVar(v, by, e), t);
+		#if haxe_210
+		case EMacro(e):
+			EMacro(replaceVar(v, by, e));
+		#end
 		}, pos : e.pos };
 	}
 
