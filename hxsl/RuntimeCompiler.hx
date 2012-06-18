@@ -728,7 +728,6 @@ class RuntimeCompiler
 		var v = processVar({
 			name : "$tmp" + id,
 			kind : VTmp,
-			kindInferred : false,
 			type : type,
 			id : id,
 			index : indexes[Type.enumIndex(VTmp)],
@@ -759,7 +758,6 @@ class RuntimeCompiler
 			var varying = {
 				name : vr.name,
 				kind : VVar,
-				kindInferred : false,
 				type : vr.type,
 				id : vr.id,
 				refId : -1,
@@ -924,7 +922,6 @@ class RuntimeCompiler
 			newVar = {
 				name : v.name,
 				kind : kind,
-				kindInferred : false,
 				type : v.type,
 				id : v.id,
 				index : index,
@@ -1007,7 +1004,6 @@ class RuntimeCompiler
 		var v : Variable = {
 			name : "$c" + id,
 			kind : VParam,
-			kindInferred : false,
 			type : TFloat4,
 			id : id,
 			index : index, // offset later

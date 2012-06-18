@@ -29,7 +29,7 @@ class Compiler {
 	var cur : Code;
 	var allVars : Array<Variable>;
 	var scopeVars : Hash<Variable>;
-	var globalVars : Hash<Variable>; 
+	var globalVars : Hash<Variable>;
 	var ops : Array<Array<{ p1 : VarType, p2 : VarType, r : VarType }>>;
 	var tempCount : Int;
 	var helpers : Hash<Data.ParsedCode>;
@@ -38,12 +38,14 @@ class Compiler {
 	var allowTextureRead : Bool;
 	var globalsRead : Hash<Variable>;
 	var iterators : IntHash<Variable>;
+	var paramsInferred : Array<Variable>;
 
 	public var config : { inlTranspose : Bool, inlInt : Bool, allowAllWMasks : Bool, forceReads : Bool };
 
 	public function new() {
 		tempCount = 0;
 		scopeVars = new Hash();
+		paramsInferred = [];
 		config = { inlTranspose : true, inlInt : true, allowAllWMasks : false, forceReads : true };
 		ops = new Array();
 		for( o in initOps() )
@@ -343,7 +345,6 @@ class Compiler {
 			name : name,
 			type : t,
 			kind : k,
-			kindInferred : false,
 			id : allVars.length,
 			refId : -1,
 			index : 0,
@@ -371,8 +372,9 @@ class Compiler {
 			if ( v.assign != null ) throw "assert";
 
 			v.kind = k;
-			v.kindInferred = true;
 			v.write = switch(k) { case VInput, VParam: Tools.fullBits(v.type); default: 0; }
+			if( k == VParam )
+				paramsInferred.push(v);
 		}
 	}
 
@@ -521,7 +523,7 @@ class Compiler {
 		inferKind(v, inConstantExpr ? VCompileConstant : VParam, p);
 
 		if ( inConstantExpr ) {
-			if ( v.kind == VParam && globalVars.exists(v.name) && v.kindInferred ) {
+			if ( v.kind == VParam && globalVars.exists(v.name) && paramsInferred.remove(v) ) {
 				// Re-infer Uniform --> CompileConstant
 				if ( !v.read ) throw "assert";
 				checkTypeForKind(v.type, VCompileConstant, p);
@@ -547,7 +549,7 @@ class Compiler {
 				}
 			case VOut: error("Output cannot be read", p);
 			case VVar: if( cur.vertex ) error("You cannot read variable in vertex shader", p); v.read = true;
-			case VParam: 
+			case VParam:
 				v.read = true;
 				if ( globalVars.exists(v.name) && !globalsRead.exists(v.name) ) {
 					globalsRead.set(v.name, v);

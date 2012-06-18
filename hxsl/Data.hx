@@ -83,7 +83,6 @@ typedef Variable = {
 	var index : Int;
 	var pos : Position;
 	// internal-usage only
-	var kindInferred : Bool;
 	var id : Int;
 	var refId : Int;
 	var read : Bool;

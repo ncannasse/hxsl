@@ -76,7 +76,6 @@ class Unserialize {
 				type:type,
 				kind:kind,
 				pos:pos,
-				kindInferred:false,
 				read:false,
 				write:0,
 				assign:null
