@@ -320,7 +320,7 @@ class Parser {
 				switch( v.expr ) {
 				case EConst(c):
 					switch( c ) {
-					case CIdent(i), CType(i): vname = i;
+					case CIdent(i) #if !haxe3 , CType(i) #end: vname = i;
 					default:
 					}
 				default:
@@ -370,7 +370,7 @@ class Parser {
 			return { v : PSwiz(v,swiz), p : e.pos };
 		case EConst(c):
 			switch( c ) {
-			case CType(i), CIdent(i):
+			case CIdent(i) #if !haxe3 ,CType(i) #end:
 				if( i == "null" || i == "true" || i == "false" )
 					return { v : PConst(i), p : e.pos };
 				else
@@ -412,7 +412,7 @@ class Parser {
 				return makeCall(f, [v].concat(params), e.pos);
 			case EConst(c):
 				switch( c ) {
-				case CIdent(i), CType(i):
+				case CIdent(i) #if !haxe3 , CType(i) #end:
 					return makeCall(i, params, e.pos);
 				default:
 				}
@@ -500,8 +500,10 @@ class Parser {
 			EField(replaceVar(v, by, e), f);
 		case EParenthesis(e):
 			EParenthesis(replaceVar(v, by, e));
+		#if !haxe3
 		case EType(e, f):
 			EType(replaceVar(v, by, e), f);
+		#end
 		case EArray(e1, e2):
 			EArray(replaceVar(v, by, e1), replaceVar(v, by, e2));
 		case EIn(a,b):
