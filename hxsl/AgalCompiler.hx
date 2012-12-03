@@ -91,9 +91,9 @@ class AgalCompiler {
 		case VTmp: RTemp;
 		case VVar: RVar;
 		case VInput: RAttr;
-		case VTexture, VCompileConstant: throw "assert";
+		case VTexture, VConst: throw "assert";
 		}
-		return { t : t, index : v.index, swiz : swiz, access : null };
+		return { t : t, index : v._index, swiz : swiz, access : null };
 	}
 
 	function delta( r : Reg, n : Int, ?s) : Reg {
@@ -200,7 +200,7 @@ class AgalCompiler {
 				mov(d, t, v.t);
 				return;
 			case CVar(_), CSwiz(_), CBlock(_), CAccess(_):
-			case CLiteral(_), CVector(_), CIf(_), CFor(_), CTexE(_): throw "assert";
+			case CConst(_), CLiteral(_), CVector(_), CIf(_), CFor(_): throw "assert";
 			}
 		compileTo(d, e);
 	}
@@ -583,6 +583,21 @@ class AgalCompiler {
 					return;
 				default:
 				}
+			// some specific handling
+			switch( op ) {
+			case CLte:
+				var tmp = e2;
+				e2 = e1;
+				e1 = tmp;
+				op = CGte;
+			case CGt:
+				var tmp = e2;
+				e2 = e1;
+				e1 = tmp;
+				op = CLt;
+			default:
+			}
+			// -
 			var v1 = compileSrc(e1);
 			var v2 = compileSrc(e2);
 			// it is not allowed to apply an operation on two constants or two vars at the same time : use a temp var
@@ -602,7 +617,7 @@ class AgalCompiler {
 				switch( e2.t ) {
 				case TMatrix(_):
 					switch( e1.t ) {
-					case TFloat4: if( v1.t == RTemp || v2.t == RTemp ) callback(matrixOp,ODp4,4) else OM44;
+					case TFloat4: if( v1.t == RTemp || v2.t == RTemp ) callback(matrixOp,ODp4,e.t == TFloat4 ? 4 : 3) else if( e.t == TFloat4 ) OM44 else OM34;
 					case TFloat3: if( v1.t == RTemp || v2.t == RTemp ) callback(matrixOp,e.t == TFloat4 ? ODp4 : ODp3,3) else if( e.t == TFloat4 ) OM34 else OM33;
 					case TMatrix(w, h, _):
 						if( w == 4 && h == 4 )
@@ -624,7 +639,7 @@ class AgalCompiler {
 			case CNeq: OSne;
 			case CLt: OSlt;
 			case CMod: modGenerate;
-			case COr, CAnd: throw "assert";
+			case COr, CAnd, CLte, CGt: throw "assert";
 			})(dst, v1, v2));
 		case CUnop(op, p):
 			var v = compileSrc(p);
@@ -685,26 +700,30 @@ class AgalCompiler {
 				if( cube ) tflags.push(TCube);
 			default:
 			}
-			for( f in flags ) {
-				if( f == TSingle ) continue;
-				tflags.push(switch(f) {
-				case TMipMapDisable: TMipMapDisable;
-				case TMipMapNearest: TMipMapNearest;
-				case TMipMapLinear: TMipMapLinear;
-				case TWrap: TWrap;
-				case TClamp: TClamp;
-				case TFilterNearest: TFilterNearest;
-				case TFilterLinear: TFilterLinear;
-				case TLodBias(v): TLodBias(v);
-				case TSingle: null;
-				});
-			}
-			code.push(OTex(dst, vtmp, { index : v.index, flags : tflags } ));
+			for( f in flags )
+				switch( f.f ) {
+				case CTFlag(f):
+					if( f == TSingle ) continue;
+					tflags.push(switch(f) {
+					case TMipMapDisable: TMipMapDisable;
+					case TMipMapNearest: TMipMapNearest;
+					case TMipMapLinear: TMipMapLinear;
+					case TWrap: TWrap;
+					case TClamp: TClamp;
+					case TFilterNearest: TFilterNearest;
+					case TFilterLinear: TFilterLinear;
+					case TLodBias(v): TLodBias(v);
+					case TSingle: null;
+					});
+				case CTParam(_):
+					throw "asset";
+				}
+			code.push(OTex(dst, vtmp, { index : v._index, flags : tflags } ));
 		case CBlock(el, v):
 			for( e in el )
 				compileExpr(e.e, e.v);
 			compileTo(dst,v);
-		case CLiteral(_), CVector(_), CIf(_), CFor(_), CTexE(_):
+		case CConst(_), CLiteral(_), CVector(_), CIf(_), CFor(_):
 			throw "assert";
 		}
 	}
@@ -728,7 +747,7 @@ class AgalCompiler {
 			var r1 = reg(v1);
 			var r2 = compileSrc(e2);
 			return { t : r2.t, index : r2.index, access : { t : r1.t, comp : r2.swiz[0], offset : r1.index }, swiz : initSwiz(e.t) };
-		case CLiteral(_), CVector(_), CIf(_), CFor(_), CTexE(_): throw "assert";
+		case CConst(_), CLiteral(_), CVector(_), CIf(_), CFor(_): throw "assert";
 		}
 	}
 

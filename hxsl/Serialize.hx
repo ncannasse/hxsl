@@ -40,7 +40,7 @@ class Serialize {
 	static inline var CIF = 7;
 	static inline var CLITERAL = 8;
 	static inline var CFOR = 9;
-	static inline var CTEXE = 10;
+	static inline var CCONST = 10;
 	static inline var CVECTOR = 11;
 
 	var debug : Bool;
@@ -77,10 +77,6 @@ class Serialize {
 		var allVars = data.vars.concat(tmpVars);
 		s.serialize(allVars.length);
 		for( v in allVars ) {
-			s.serialize(v.id);
-			s.serialize(v.refId+1);
-			if( v.refId != -1 )
-				s.serialize(v.index);
 			serializeVarType(v.type);
 			s.serialize(Type.enumIndex(v.kind));
 			switch ( v.kind ) {
@@ -89,7 +85,6 @@ class Serialize {
 			}
 			serializePosition(v.pos);
 		}
-
 		return s.toString() + "#" + code;
 	}
 	
@@ -127,6 +122,15 @@ class Serialize {
 			return;
 		}
 		switch ( v.d ) {
+		case CConst(c):
+			s.serialize(CCONST);
+			s.serialize(Type.enumIndex(c));
+			switch( c ) {
+			case CNull:
+			case CBool(b): s.serialize(b);
+			case CInt(i): s.serialize(i);
+			case CFloat(f): s.serialize(f);
+			}
 		case CVar(v, swiz):
 			s.serialize(CVAR);
 			serializeVar(v);
@@ -147,21 +151,12 @@ class Serialize {
 		case CTex(v, acc, flags):
 			s.serialize(CTEX);
 			serializeVar(v);
+			serializeCodeValue(acc);
 			serializeTexFlags(flags);
-			serializeCodeValue(acc);
-		case CTexE(v, acc, flags):
-			s.serialize(CTEXE);
-			serializeVar(v);
-			s.serialize(flags.length);
-			for ( f in flags ) {
-				s.serialize(Type.enumIndex(f.t));
-				serializeCodeValue(f.e);
-			}
-			serializeCodeValue(acc);
 		case CSwiz(e, swiz):
 			s.serialize(CSWIZ);
-			serializeSwiz(swiz);
 			serializeCodeValue(e);
+			serializeSwiz(swiz);
 		case CBlock(exprs, v):
 			s.serialize(CBLOCK);
 			s.serialize(exprs.length);
@@ -237,19 +232,19 @@ class Serialize {
 		}
 	}
 
-	function serializeTexFlags( flags:Array<TexFlag> ) : Void {
-		if ( flags != null ) {
-			s.serialize(flags.length);
-			for ( c in flags ) {
-				s.serialize(Type.enumIndex(c));
-				switch ( c ) {
-				case TLodBias(bias):
-					s.serialize(bias);
-				default:
-				}
+	function serializeTexFlags( flags:Array<{ f : CodeTexFlag, p : Position }> ) : Void {
+		s.serialize(flags.length);
+		for( c in flags ) {
+			switch( c.f ) {
+			case CTFlag(f):
+				s.serialize(false);
+				s.serialize(Type.enumIndex(f));
+			case CTParam(p,v):
+				s.serialize(true);
+				s.serialize(Type.enumIndex(p));
+				serializeCodeValue(v);
 			}
-		} else {
-			s.serialize(0);
+			serializePosition(c.p);
 		}
 	}
 	

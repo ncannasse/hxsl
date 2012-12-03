@@ -7,6 +7,8 @@ import haxe.macro.Context;
 #end
 
 class Main {
+	
+	static var COUNT = 0;
 
 	#if macro
 	static function agalToString( c : format.agal.Data ) {
@@ -71,10 +73,10 @@ class Main {
 		var p = ctx.createProgram();
 		p.upload(stringToBytes(vertex), stringToBytes(fragment));
 		p.dispose();
+		COUNT++;
 	}
 
 	static function checkShaders() {
-		
 		
 		// basic shader
 		test({
@@ -124,27 +126,6 @@ class Main {
 			mov out, v0.xyzw
 		");
 		
-		// check that we correcly perform additional reads on inputs/textures
-		// even if runtime shader skip some reads
-		test( {
-			var input : {
-				pos : Float3,
-				n : Float3,
-			};
-			var flag : Bool;
-			function vertex() {
-				out = pos.xyzw + (flag ? n.xyzw : [0,0,0,0]);
-			}
-			function fragment( tex : Texture ) {
-				out = (flag ? tex.get(pos.xy) : [0,0,0,0]);
-			}
-		},"
-			mov out, pos
-			
-			mov out, c0
-		");
-		
-		
 		error({
 		},"Missing vertex function");
 		
@@ -191,7 +172,8 @@ class Main {
 			function fragment() {
 			}
 		},"Unknown variable 'xpos'");
-				
+	
+		trace(COUNT+" shaders checked");
 	}
 	
 	static var ctx : flash.display3D.Context3D;

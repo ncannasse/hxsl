@@ -40,7 +40,6 @@ enum TexFlag {
 enum TexParam {
 	PMipMap;
 	PWrap;
-	PClamp;
 	PFilter;
 	PLodBias;
 	PSingle;
@@ -60,11 +59,12 @@ enum VarKind {
 	VOut;
 	VTmp;
 	VTexture;
-	// internal-usage only
-	VCompileConstant;
+	// compile time constant
+	VConst;
 }
 
 enum VarType {
+	TNull;
 	TBool;
 	TFloat;
 	TFloat2;
@@ -77,17 +77,12 @@ enum VarType {
 }
 
 typedef Variable = {
+	var id : Int;
 	var name : String;
 	var type : VarType;
 	var kind : VarKind;
-	var index : Int;
+	var _index : Int;
 	var pos : Position;
-	// internal-usage only
-	var id : Int;
-	var refId : Int;
-	var read : Bool;
-	var write : Int;
-	var assign : { v : Variable, s : Array<Comp> };
 }
 
 enum CodeOp {
@@ -101,6 +96,8 @@ enum CodeOp {
 	CCross;
 	CDot;
 	CLt;
+	CGt;
+	CLte;
 	CGte;
 	CMod;
 	CEq;
@@ -133,20 +130,32 @@ enum CodeUnop {
 
 // final hxsl
 
+enum Const {
+	CNull;
+	CInt( i : Int );
+	CFloat( v : Float );
+	CBool( b : Bool );
+}
+
 enum CodeValueDecl {
 	CVar( v : Variable, ?swiz : Array<Comp> );
 	COp( op : CodeOp, e1 : CodeValue, e2 : CodeValue );
 	CUnop( op : CodeUnop, e : CodeValue );
 	CAccess( v : Variable, idx : CodeValue );
-	CTex( v : Variable, acc : CodeValue, flags : Array<TexFlag> );
+	CTex( v : Variable, acc : CodeValue, mode : Array<{ f : CodeTexFlag, p : Position }> );
 	CSwiz( e : CodeValue, swiz : Array<Comp> );
 	CBlock( exprs : Array<{ v : CodeValue, e : CodeValue }>, v : CodeValue );
 	// used in intermediate representation only
 	CIf( cond : CodeValue, eif : Array<{v:CodeValue, e:CodeValue}>, eelse : Null<Array<{v:CodeValue, e:CodeValue}>> );
+	CConst( c : Const );
 	CLiteral( value : Array<Float> );
 	CFor( iterator : Variable, start : CodeValue, end : CodeValue, exprs : Array<{v:CodeValue, e:CodeValue}> );
-	CTexE( v : Variable, acc : CodeValue, flags : Array<{t:TexParam, e:CodeValue}> );
 	CVector( vals : Array<CodeValue> );
+}
+
+enum CodeTexFlag {
+	CTFlag( t : TexFlag );
+	CTParam( t : TexParam, value : CodeValue );
 }
 
 typedef CodeValue = {
@@ -175,21 +184,25 @@ typedef Data = {
 
 enum ParsedValueDecl {
 	PVar( v : String );
-	PConst( v : String );
+	PConst( c : Const );
 	PLocal( v : ParsedVar );
 	POp( op : CodeOp, e1 : ParsedValue, e2 : ParsedValue );
 	PUnop( op : CodeUnop, e : ParsedValue );
-	PTex( v : String, acc : ParsedValue, flags : Array<ParsedExpr> );
+	PTex( v : String, acc : ParsedValue, mode : Array<{ f : ParsedTexFlag, p : Position }> );
 	PSwiz( e : ParsedValue, swiz : Array<Comp> );
 	PIf( cond : ParsedValue, eif : Array<ParsedExpr>, eelse : Array<ParsedExpr> );
 	PFor( it : ParsedVar, first : ParsedValue, last : ParsedValue, expr:ParsedExpr );
-	PIff( cond : ParsedValue, eif : ParsedValue, eelse : ParsedValue ); // inline if statement
+	PCond( cond : ParsedValue, eif : ParsedValue, eelse : ParsedValue ); // inline if statement
 	PVector( el : Array<ParsedValue> );
-	PRow( e : ParsedValue, index : Int );
+	PRow( e : ParsedValue, index : ParsedValue );
 	PBlock( el : Array<ParsedExpr> );
 	PReturn( e : ParsedValue );
 	PCall( n : String, vl : Array<ParsedValue> );
-	PAccess( v : String, e : ParsedValue );
+}
+
+enum ParsedTexFlag {
+	PTFlag( t : TexFlag );
+	PTParam( t : TexParam, value : ParsedValue );
 }
 
 typedef ParsedValue = {
@@ -246,22 +259,38 @@ class Tools {
 		};
 	}
 
+	public static function typeStr( t : VarType )  {
+		switch( t ) {
+		case TMatrix(r, c, t):
+			return "M" + r + "" + c + (t.t ? "T" : "");
+		case TTexture(cube):
+			return cube ? "CubeTexture" : "Texture";
+		case TArray(t, size):
+			return typeStr(t) + "<" + size + ">";
+		default:
+			return Std.string(t).substr(1);
+		}
+	}
+	
+	
 	public static function regSize( t : VarType ) {
 		return switch( t ) {
-		case TMatrix(w, h, t): t.t ? h : w;
+		case TMatrix(w, h, t):
+			// assume matrix are always packed
+			if( t.t == null )
+				w < h ? w : h;
+			else
+				t.t ? h : w;
 		case TArray(t, size):
-			var v = regSize(t);
-			switch(t) {
-			case TMatrix(w, h, t): if ( v < 4 ) v = 4;
-			default:
-			}
-			v * size;
-		default: 1;
+			regSize(t) * size;
+		default:
+			1;
 		}
 	}
 
 	public static function floatSize( t : VarType ) {
 		return switch( t ) {
+		case TNull: 1;
 		case TBool: 1;
 		case TFloat: 1;
 		case TFloat2: 2;
