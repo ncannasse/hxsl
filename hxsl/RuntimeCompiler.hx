@@ -341,19 +341,6 @@ class RuntimeCompiler
 		return out;
 	}
 
-	function getCompileValue( name:String, swiz:Array<Comp> ) {
-		var vals = compileValues.get(name);
-		if ( swiz != null ) {
-			var out = [];
-			for ( s in swiz ) {
-				out.push( vals != null ? vals[Type.enumIndex(s)] : 0.0 );
-			}
-			return out;
-		} else {
-			return vals;
-		}
-	}
-
 	function varEvaluatable( v : Variable, swiz ) {
 		if ( v.kind == VCompileConstant ) return true;
 		if ( v.kind == VParam && literals.exists(v.id) && Tools.isFloat(v.type) ) return true;
@@ -412,7 +399,16 @@ class RuntimeCompiler
 				var eval = evaluations.get(vr.id);
 				return evalSwiz(vr.type, eval.vals, swiz);
 			} else if ( vr.kind == VCompileConstant ) {
-				return getCompileValue(vr.name, swiz);
+				var vals = compileValues.get(vr.name);
+				if ( swiz != null ) {
+					var out = [];
+					for ( s in swiz ) {
+						out.push( vals != null ? vals[Type.enumIndex(s)] : 0.0 );
+					}
+					return out;
+				} else {
+					return vals;
+				}
 			} else if ( Tools.isFloat(vr.type) ) {
 				if ( vr.kind != VParam || !literals.exists(vr.id) ) throw "assert";
 				var const = consts[literals.get(vr.id).index];

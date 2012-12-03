@@ -23,8 +23,13 @@
  */
 package hxsl;
 
+#if (haxe_211 || haxe3)
+import hxsl.Data;
+import format.agal.Data;
+#else
 import format.agal.Data;
 import hxsl.Data;
+#end
 
 private typedef Temp = {
 	var liveBits : Array<Null<Int>>;
