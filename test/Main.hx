@@ -26,7 +26,13 @@ class Main {
 	
 	static function compileShader( shader : Expr, params : {} ) {
 		var p = new hxsl.Parser().parse(shader);
-		var data = new hxsl.Compiler().compile(p);
+		var c = new hxsl.Compiler();
+		var warnings = [];
+		// warning as errors
+		c.warn = function(msg, p) warnings.push({ msg : msg, p : p });
+		c.compile(p);
+		return { warn : warnings, str : null, chk : null };
+		/*
 		data = new hxsl.RuntimeCompiler().compile(data, params);
 		var vert = new hxsl.AgalCompiler().compile(data.vertex);
 		var frag = new hxsl.AgalCompiler().compile(data.fragment);
@@ -34,6 +40,7 @@ class Main {
 		var fexpr = { expr : EConst(CString(haxe.Serializer.run(agalToBytes(frag)))), pos : shader.pos };
 		var chk = macro testRuntimeShader($vexpr,$fexpr);
 		return { str : agalToString(vert) + "\n\n" + agalToString(frag), chk : chk };
+		*/
 	}
 	#end
 	
@@ -42,8 +49,12 @@ class Main {
 		try {
 			s = compileShader(shader, params);
 		} catch( e : hxsl.Data.Error ) {
+			if( e.message == out )
+				return macro null;
 			Context.error(e.message, e.pos);
 		}
+		if( s.str == null )
+			return macro null;
 		var out = StringTools.trim(out.split("\r\n").join("\n").split("\t").join(""));
 		if( s.str != out )
 			Context.error("Wrong AGAL output :\n" + s.str, shader.pos);
@@ -55,7 +66,22 @@ class Main {
 			compileShader(shader, params);
 			Context.error("Shader compilation should give an error", shader.pos);
 		} catch( e : hxsl.Data.Error ) {
-			if( e.message.indexOf(msg) < 0 ) Context.error("Unexpected error : " + e.message, e.pos);
+			if( e.message != msg ) Context.error("Unexpected error : " + e.message, e.pos);
+		}
+		return { expr : EBlock([]), pos : shader.pos };
+	}
+	
+	@:macro static function warning( shader : Expr, msg : String, ?params : { } ) {
+		try {
+			var r = compileShader(shader, params);
+			if( r.warn.length == 0 )
+				Context.error("No warning was printed", shader.pos);
+			else if( r.warn.length > 1 )
+				Context.error("Too many warning were printed [" + r.warn + "]", shader.pos);
+			else if( r.warn[0].msg != msg )
+				Context.error("Unexpected warning : " + r.warn[0].msg, r.warn[0].p);
+		} catch( e : hxsl.Data.Error ) {
+			Context.error("Unexpected error : " + e.message, e.pos);
 		}
 		return { expr : EBlock([]), pos : shader.pos };
 	}
@@ -126,6 +152,26 @@ class Main {
 			mov out, v0.xyzw
 		");
 		
+		// let's try a const
+		test( {
+			var pos : Input<Float4>;
+			function vertex( mpos : Matrix ) {
+				out = (mpos == null) ? pos : pos * mpos;
+			}
+			function fragment() { out = [1, 2, 3, 4]; }
+		},"
+		");
+		
+
+		// invalid const usage
+		error( {
+			var pos : Input<Float4>;
+			function vertex() {
+				out = (pos == null) ? pos : pos;
+			}
+			function fragment() { out = [1, 2, 3, 4]; }
+		},"Only constants can be compared to null");
+
 		error({
 		},"Missing vertex function");
 		
@@ -135,19 +181,13 @@ class Main {
 		},"Missing fragment function");
 
 		error( {
-			function vertex() {
-			}
-			function fragment() {
-			}
-		},"Missing input variable");
-	
-		error( {
 			var input : {
 				pos : Float3,
 			};
 			function vertex() {
 			}
 			function fragment() {
+				out = pos.xyzw;
 			}
 		},"Output is not written by vertex shader");
 		
@@ -162,6 +202,15 @@ class Main {
 			}
 		},"Output is not written by fragment shader");
 
+		
+		error( {
+			function vertex(tmp:Float4) {
+				tmp + tmp = tmp;
+			}
+			function fragment() {
+			}
+		},"Invalid assign");
+		
 		error( {
 			var input : {
 				pos : Float3,
@@ -172,7 +221,32 @@ class Main {
 			function fragment() {
 			}
 		},"Unknown variable 'xpos'");
-	
+		
+		warning( {
+			var v : Input<Float4>;
+			var unused : Float;
+			function vertex() {
+				out = v;
+			}
+			function fragment() {
+				out = v;
+			}
+		},"Parameter 'unused' not used");
+		
+		test( {
+			function vertex() {
+				if( true ) {
+					out = [1, 2, 3, 4];
+				} else {
+					out.xyz = [1,1,1];
+				}
+				out.w = 0;
+			}
+			function fragment() {
+				out = [1, 2, 3, 4];
+			}
+		},"");
+		
 		trace(COUNT+" shaders checked");
 	}
 	

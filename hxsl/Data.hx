@@ -59,7 +59,7 @@ enum VarKind {
 	VOut;
 	VTmp;
 	VTexture;
-	// compile time constant
+	// compile time constant : a VParam that also changes the shader flow
 	VConst;
 }
 
@@ -144,13 +144,13 @@ enum CodeValueDecl {
 	CAccess( v : Variable, idx : CodeValue );
 	CTex( v : Variable, acc : CodeValue, mode : Array<{ f : CodeTexFlag, p : Position }> );
 	CSwiz( e : CodeValue, swiz : Array<Comp> );
-	CBlock( exprs : Array<{ v : CodeValue, e : CodeValue }>, v : CodeValue );
 	// used in intermediate representation only
-	CIf( cond : CodeValue, eif : Array<{v:CodeValue, e:CodeValue}>, eelse : Null<Array<{v:CodeValue, e:CodeValue}>> );
 	CConst( c : Const );
-	CLiteral( value : Array<Float> );
+	CIf( cond : CodeValue, eif : Array<{v:CodeValue, e:CodeValue}>, eelse : Null<Array<{v:CodeValue, e:CodeValue}>> );
+	CCond( cond : CodeValue, eif : CodeValue, eelse : CodeValue );
 	CFor( iterator : Variable, start : CodeValue, end : CodeValue, exprs : Array<{v:CodeValue, e:CodeValue}> );
 	CVector( vals : Array<CodeValue> );
+	CRow( e1 : CodeValue, e2 : CodeValue );
 }
 
 enum CodeTexFlag {
@@ -190,8 +190,8 @@ enum ParsedValueDecl {
 	PUnop( op : CodeUnop, e : ParsedValue );
 	PTex( v : String, acc : ParsedValue, mode : Array<{ f : ParsedTexFlag, p : Position }> );
 	PSwiz( e : ParsedValue, swiz : Array<Comp> );
-	PIf( cond : ParsedValue, eif : Array<ParsedExpr>, eelse : Array<ParsedExpr> );
-	PFor( it : ParsedVar, first : ParsedValue, last : ParsedValue, expr:ParsedExpr );
+	PIf( cond : ParsedValue, eif : ParsedValue, eelse : ParsedValue );
+	PFor( it : String, first : ParsedValue, last : ParsedValue, expr:ParsedValue );
 	PCond( cond : ParsedValue, eif : ParsedValue, eelse : ParsedValue ); // inline if statement
 	PVector( el : Array<ParsedValue> );
 	PRow( e : ParsedValue, index : ParsedValue );

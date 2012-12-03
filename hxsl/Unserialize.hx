@@ -139,15 +139,14 @@ class Unserialize {
 			var swiz = unserializeSwiz();
 			CSwiz(e, swiz);
 		case 6:
-			var numExprs:Int = s.unserialize();
-			var exprs = [];
-			for ( i in 0...numExprs ) {
-				var v = unserializeCodeValue();
-				var e = unserializeCodeValue();
-				exprs.push( {v : v, e : e} );
-			}
-			var v = unserializeCodeValue();
-			CBlock(exprs, v);
+			CConst(switch( s.unserialize() ) {
+			case 0: CNull;
+			case 1: CInt(s.unserialize());
+			case 2: CFloat(s.unserialize());
+			case 3: CBool(s.unserialize());
+			default:
+				throw "assert";
+			});
 		case 7:
 			var cond = unserializeCodeValue();
 			var eifLen:Int = s.unserialize();
@@ -169,8 +168,10 @@ class Unserialize {
 			}
 			CIf(cond, eif, eelse);
 		case 8:
-			var value = s.unserialize();
-			CLiteral(value);
+			var cond = unserializeCodeValue();
+			var e1 = unserializeCodeValue();
+			var e2 = unserializeCodeValue();
+			CCond(cond, e1, e2);
 		case 9:
 			var it = unserializeVar();
 			var start = unserializeCodeValue();
@@ -184,15 +185,6 @@ class Unserialize {
 			}
 			CFor(it, start, end, exprs);
 		case 10:
-			CConst(switch( s.unserialize() ) {
-			case 0: CNull;
-			case 1: CInt(s.unserialize());
-			case 2: CFloat(s.unserialize());
-			case 3: CBool(s.unserialize());
-			default:
-				throw "assert";
-			});
-		case 11:
 			var numVals = s.unserialize();
 			var vals = [];
 			for ( i in 0...numVals ) vals.push(unserializeCodeValue());

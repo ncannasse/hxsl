@@ -30,19 +30,6 @@ import hxsl.Data;
 // Helpers for serializing/unserializing intermediate hxsl opcodes
 class Serialize {
 	
-	static inline var CVAR = 0;
-	static inline var COP = 1;
-	static inline var CUNOP = 2;
-	static inline var CACCESS = 3;
-	static inline var CTEX = 4;
-	static inline var CSWIZ = 5;
-	static inline var CBLOCK = 6;
-	static inline var CIF = 7;
-	static inline var CLITERAL = 8;
-	static inline var CFOR = 9;
-	static inline var CCONST = 10;
-	static inline var CVECTOR = 11;
-
 	var debug : Bool;
 	var s : haxe.Serializer;
 	var tmpVars : IntHash<Variable>;
@@ -121,9 +108,9 @@ class Serialize {
 			s.serialize(null);
 			return;
 		}
+		s.serialize(Type.enumIndex(v.d));
 		switch ( v.d ) {
 		case CConst(c):
-			s.serialize(CCONST);
 			s.serialize(Type.enumIndex(c));
 			switch( c ) {
 			case CNull:
@@ -132,41 +119,26 @@ class Serialize {
 			case CFloat(f): s.serialize(f);
 			}
 		case CVar(v, swiz):
-			s.serialize(CVAR);
 			serializeVar(v);
 			serializeSwiz(swiz);
 		case COp(op, e1, e2):
-			s.serialize(COP);
 			s.serialize(Type.enumIndex(op));
 			serializeCodeValue(e1);
 			serializeCodeValue(e2);
 		case CUnop(op, e):
-			s.serialize(CUNOP);
 			s.serialize(Type.enumIndex(op));
 			serializeCodeValue(e);
 		case CAccess(v, idx):
-			s.serialize(CACCESS);
 			serializeVar(v);
 			serializeCodeValue(idx);
 		case CTex(v, acc, flags):
-			s.serialize(CTEX);
 			serializeVar(v);
 			serializeCodeValue(acc);
 			serializeTexFlags(flags);
 		case CSwiz(e, swiz):
-			s.serialize(CSWIZ);
 			serializeCodeValue(e);
 			serializeSwiz(swiz);
-		case CBlock(exprs, v):
-			s.serialize(CBLOCK);
-			s.serialize(exprs.length);
-			for ( expr in exprs ) {
-				serializeCodeValue(expr.v);
-				serializeCodeValue(expr.e);
-			}
-			serializeCodeValue(v);
 		case CIf(cond, eif, eelse):
-			s.serialize(CIF);
 			serializeCodeValue(cond);
 			s.serialize(eif.length);
 			for ( expr in eif ) {
@@ -179,7 +151,6 @@ class Serialize {
 				serializeCodeValue(expr.e);
 			}
 		case CFor(it, start, end, exprs):
-			s.serialize(CFOR);
 			s.serialize(it.id);
 			serializeCodeValue(start);
 			serializeCodeValue(end);
@@ -189,12 +160,15 @@ class Serialize {
 				serializeCodeValue(expr.e);
 			}
 		case CVector(values):
-			s.serialize(CVECTOR);
 			s.serialize(values.length);
 			for ( v in values ) serializeCodeValue(v);
-		case CLiteral(value):
-			s.serialize(CLITERAL);
-			s.serialize(value);
+		case CCond(c,e1,e2):
+			serializeCodeValue(c);
+			serializeCodeValue(e1);
+			serializeCodeValue(e2);
+		case CRow(e1, e2):
+			serializeCodeValue(e1);
+			serializeCodeValue(e2);
 		}
 
 		serializeVarType(v.t);

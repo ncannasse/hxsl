@@ -54,7 +54,6 @@ class Parser {
 		}
 		if( vertex == null ) error("Missing vertex function", e.pos);
 		if( fragment == null ) error("Missing fragment function", e.pos);
-		if( !hasInput() ) error("Missing input variable", e.pos);
 		allowReturn = false;
 		var vs = buildShader(vertex);
 		var fs = buildShader(fragment);
@@ -63,16 +62,6 @@ class Parser {
 		for( h in helpers.keys() )
 			help.set(h, buildShader(helpers.get(h)));
 		return { vertex : vs, fragment : fs, vars : vars, pos : e.pos, helpers : help };
-	}
-
-	function hasInput() {
-		for ( v in vars )
-			switch(v.k) {
-			case VInput:
-				return true;
-			default:
-			}
-		return false;
 	}
 
 	public dynamic function includeFile( file : String ) : Null<Expr> {
@@ -241,7 +230,7 @@ class Parser {
 		for( p in f.args ) {
 			if( p.type == null ) error("Missing parameter type '" + p.name + "'", pos);
 			if( p.value != null ) error("Unsupported default value", p.value.pos);
-			cur.args.push(allocVar(p.name, p.type, VParam, pos));
+			cur.args.push(allocVar(p.name, p.type, null, pos));
 		}
 		parseExpr(f.expr);
 		return cur;
@@ -272,13 +261,13 @@ class Parser {
 			var eold = cur.exprs;
 			cur.exprs = [];
 			parseExpr(eif);
-			var pif = cur.exprs;
-
+			var pif = { v : PBlock(cur.exprs), p : eif.pos };
+			
 			var pelse = null;
-			if ( eelse != null ) {
+			if( eelse != null ) {
 				cur.exprs = [];
 				parseExpr(eelse);
-				pelse = cur.exprs;
+				pelse = { v : PBlock(cur.exprs), p : eelse.pos };
 			}
 			cur.exprs = eold;
 			cur.exprs.push( {v:null, e: { v:PIf(pcond, pif, pelse), p : e.pos }, p : e.pos} );
@@ -338,11 +327,12 @@ class Parser {
 			if( min == null || max == null || vname == null )
 				error("For iterator should be in the form x...y", it.pos);
 
-			var len = cur.exprs.length;
+			var old = cur.exprs;
+			cur.exprs = [];
 			parseExpr(expr);
-			if ( cur.exprs.length != len+1 ) error("Multiple for expressions ?",e.pos);
-			var itvar = {n:vname, t:TFloat, k:VTmp, p:it.pos};
-			cur.exprs.push( {v : null, e:{v:PFor(itvar, min, max, cur.exprs.pop()), p:e.pos}, p:e.pos } );
+			var pexpr = { v : PBlock(cur.exprs), p : expr.pos };
+			cur.exprs = old;
+			cur.exprs.push( {v : null, e:{v:PFor(vname, min, max, pexpr), p:e.pos}, p:e.pos } );
 		case EReturn(r):
 			if( r == null ) error("Return must return a value", e.pos);
 			if( !allowReturn ) error("Return only allowed as final expression in helper methods", e.pos);
