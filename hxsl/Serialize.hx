@@ -32,47 +32,24 @@ class Serialize {
 	
 	var debug : Bool;
 	var s : haxe.Serializer;
-	var tmpVars : IntHash<Variable>;
+	var savedVars : IntHash<Bool>;
 	
 	function new(debug) {
+		savedVars = new IntHash();
 		this.debug = debug;
 	}
 	
 	function doSerialize( data : Data ) {
-		tmpVars = new IntHash();
-		
-		// serialize code and collect vars
 		s = new haxe.Serializer();
 		s.useCache = false;
 		s.useEnumIndex = true;
-		
+		s.serialize(debug);
+		s.serialize(data.globals.length);
+		for( v in data.globals )
+			serializeVar(v);
 		serializeCode(data.vertex);
 		serializeCode(data.fragment);
-		var code = s.toString();
-		
-		// serialize collected vars
-		s = new haxe.Serializer();
-		s.useCache = false;
-		s.useEnumIndex = true;
-		
-		// header
-		s.serialize(debug);
-		
-		// vars
-		var tmpVars = Lambda.array(tmpVars);
-		tmpVars.sort(function(v1, v2) return v1.id - v2.id);
-		var allVars = data.vars.concat(tmpVars);
-		s.serialize(allVars.length);
-		for( v in allVars ) {
-			serializeVarType(v.type);
-			s.serialize(Type.enumIndex(v.kind));
-			switch ( v.kind ) {
-			case VTmp, VOut:
-			default: s.serialize(v.name);
-			}
-			serializePosition(v.pos);
-		}
-		return s.toString() + "#" + code;
+		return s.toString();
 	}
 	
 	function serializePosition( p : Position ) {
@@ -185,8 +162,16 @@ class Serialize {
 
 	function serializeVar( v : Variable ) {
 		s.serialize(v.id);
-		if( v.kind == VTmp )
-			tmpVars.set(v.id, v);
+		if( savedVars.exists(v.id) )
+			return;
+		savedVars.set(v.id, true);
+		serializeVarType(v.type);
+		s.serialize(Type.enumIndex(v.kind));
+		switch ( v.kind ) {
+		case VTmp, VOut:
+		default: s.serialize(v.name);
+		}
+		serializePosition(v.pos);
 	}
 	
 	function serializeVarType(type:VarType) {

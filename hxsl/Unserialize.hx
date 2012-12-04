@@ -27,22 +27,14 @@
 package hxsl;
 import hxsl.Data;
 
-private class CustomU extends haxe.Unserializer {
-	public function resetCache() {
-		cache = [];
-		scache = [];
-		pos++; // skip #
-	}
-}
-
 class Unserialize {
 
-	var s : CustomU;
+	var s : haxe.Unserializer;
 	var vars : IntHash<Variable>;
 	var debug : Bool;
 	
 	function new(str) {
-		s = new CustomU(str);
+		s = new haxe.Unserializer(str);
 		vars = new IntHash();
 	}
 	
@@ -52,33 +44,12 @@ class Unserialize {
 	
 	function doUnserialize() {
 		debug = s.unserialize();
-		var numVars = s.unserialize();
-		var allVars = [];
-		var varKinds = Type.allEnums(VarKind);
-		for( i in 0...numVars ) {
-			var type = unserializeVarType();
-			var kind = varKinds[s.unserialize()];
-			var name = switch ( kind ) {
-				case VTmp, VOut: "";
-				default: s.unserialize();
-			}
-			var pos = unserializePos();
-			var v:Variable = {
-				id:i,
-				name:name,
-				type:type,
-				kind:kind,
-				pos:pos,
-				index:0,
-			};
-			vars.set(v.id, v);
-			if( v.kind != VTmp )
-				allVars.push(v);
-		}
-		s.resetCache();
+		var globals = [];
+		for( i in 0...s.unserialize() )
+			globals.push(unserializeVar());
 		var vertex = unserializeCode(true);
 		var fragment = unserializeCode(false);
-		return { vars : allVars, vertex:vertex, fragment:fragment };
+		return { globals : globals, vertex:vertex, fragment:fragment };
 	}
 
 	function unserializeCode( vertex:Bool ) : Code {
@@ -103,8 +74,27 @@ class Unserialize {
 		return { pos:pos, args:args, tex:tex, exprs:exprs, consts:consts, vertex:vertex, tempSize:0 };
 	}
 
-	inline function unserializeVar() {
-		return vars.get(s.unserialize());
+	function unserializeVar() : Variable {
+		var id : Int = s.unserialize();
+		var v = vars.get(id);
+		if( v != null ) return v;
+		var type = unserializeVarType();
+		var kind = Type.createEnumIndex(VarKind,s.unserialize());
+		var name = switch ( kind ) {
+			case VTmp, VOut: "";
+			default: s.unserialize();
+		}
+		var pos = unserializePos();
+		var v:Variable = {
+			id:id,
+			name:name,
+			type:type,
+			kind:kind,
+			pos:pos,
+			index:0,
+		};
+		vars.set(v.id, v);
+		return v;
 	}
 	
 	function unserializeCodeValue() : CodeValue {

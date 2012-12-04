@@ -181,7 +181,7 @@ typedef Code = {
 typedef Data = {
 	var vertex : Code;
 	var fragment : Code;
-	var vars : Array<Variable>;
+	var globals : Array<Variable>;
 }
 
 // parsed hxsl
@@ -235,7 +235,7 @@ typedef ParsedCode = {
 
 typedef ParsedHxsl = {
 	var pos : Position;
-	var vars : Array<ParsedVar>;
+	var globals : Array<ParsedVar>;
 	var vertex : ParsedCode;
 	var fragment : ParsedCode;
 	var helpers : Hash<ParsedCode>;

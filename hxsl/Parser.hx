@@ -30,13 +30,13 @@ class Parser {
 	var vertex : Function;
 	var fragment : Function;
 	var helpers : Hash<Function>;
-	var vars : Array<ParsedVar>;
+	var globals : Array<ParsedVar>;
 	var cur : ParsedCode;
 	var allowReturn : Bool;
 
 	public function new() {
 		helpers = new Hash();
-		vars = [];
+		globals = [];
 	}
 
 	function error(msg:String, p:Position) : Dynamic {
@@ -61,7 +61,7 @@ class Parser {
 		allowReturn = true;
 		for( h in helpers.keys() )
 			help.set(h, buildShader(helpers.get(h)));
-		return { vertex : vs, fragment : fs, vars : vars, pos : e.pos, helpers : help };
+		return { vertex : vs, fragment : fs, globals : globals, pos : e.pos, helpers : help };
 	}
 
 	public dynamic function includeFile( file : String ) : Null<Expr> {
@@ -166,13 +166,13 @@ class Parser {
 					case TAnonymous(fl):
 						for( f in fl )
 							switch( f.kind ) {
-							case FVar(t,_): vars.push(allocVar(f.name,t,VInput,p));
+							case FVar(t,_): globals.push(allocVar(f.name,t,VInput,p));
 							default: error("Invalid input variable type",p);
 							}
 					default: error("Invalid type for shader input : should be anonymous", p);
 					}
 				else
-					vars.push(allocVarDecl(v.name, v.type, p));
+					globals.push(allocVarDecl(v.name, v.type, p));
 			}
 			return;
 		case EFunction(name,f):

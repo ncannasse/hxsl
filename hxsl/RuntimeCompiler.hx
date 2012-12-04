@@ -28,6 +28,7 @@ package hxsl;
 import hxsl.Data;
 
 private typedef VarProps = {
+	var global : Bool;
 	var read : Bool;
 	var write : Int;
 	var newVar : Variable;
@@ -72,8 +73,21 @@ class RuntimeCompiler {
 		return null;
 	}
 	
-	inline function props( v : Variable ) {
-		return varProps[v.id];
+	function props( v : Variable ) {
+		var p = varProps[v.id];
+		if( p == null ) {
+			p = {
+				global : false,
+				read : false,
+				write : 0,
+				newVar : null,
+				value : CNull,
+				isVertex : false,
+				ref : null,
+			}
+			varProps[v.id] = p;
+		}
+		return p;
 	}
 	
 	/**
@@ -90,21 +104,12 @@ class RuntimeCompiler {
 		defPos = data.vertex.pos;
 		
 		var hVars = new Hash();
-		for( v in data.vars ) {
-			varProps[v.id] = {
-				read : false,
-				write : 0,
-				newVar : null,
-				value : CNull,
-				isVertex : false,
-				ref : null,
-			};
+		for( v in data.globals.concat(data.vertex.args).concat(data.fragment.args) )
 			switch( v.kind ) {
 			case VParam, VConst:
 				hVars.set(v.name, v);
 			default:
 			}
-		}
 		if( constData == null )
 			constData = #if flash new flash.Vector() #else new Array() #end;
 		if( consts != null )
@@ -143,11 +148,15 @@ class RuntimeCompiler {
 		indexVars(vertex);
 		indexVars(fragment);
 		
-		for( v in extraVars )
-			usedVars.push(v);
+		var globals = [];
+		for( v in usedVars ) {
+			if( !props(v).global )
+				continue;
+			globals.push(v);
+		}
 		
 		return {
-			vars : usedVars,
+			globals : globals,
 			vertex : vertex,
 			fragment : fragment,
 		};
@@ -281,7 +290,7 @@ class RuntimeCompiler {
 	}
 	
 	function allocVar(name, k, t, p) {
-		var id = varProps.length;
+		var id = -(extraVars.length + 1);
 		var v : Variable = {
 			id : id,
 			name : name,
@@ -290,14 +299,7 @@ class RuntimeCompiler {
 			index : -1,
 			pos : p,
 		};
-		varProps.push({
-			read : false,
-			write : 0,
-			newVar : v,
-			isVertex : cur.vertex,
-			value : null,
-			ref : null,
-		});
+		props(v).isVertex = cur.vertex;
 		extraVars.push(v);
 		return v;
 	}

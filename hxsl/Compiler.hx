@@ -110,21 +110,22 @@ class Compiler {
 
 		var out = allocVar("out", VOut, TFloat4, h.pos);
 		props(out).global = true;
-
 		helpers = h.helpers;
 
-		for( v in h.vars ) {
+		var globals = [];
+		for( v in h.globals ) {
 			var v = allocVar(v.n, v.k, v.t, v.p);
 			if( namedVars.get(v.name) != null )
 				error("Duplicate variable "+v.name,v.pos);
 			namedVars.set(v.name, v);
+			globals.push(v);
 			props(v).global = true;
 		}
 
 		var vertex = compileShader(h.vertex,true);
-		var fragment = compileShader(h.fragment,false);
-
-		return { vars : allVars, vertex : vertex, fragment : fragment };
+		var fragment = compileShader(h.fragment, false);
+		
+		return { globals : globals, vertex : vertex, fragment : fragment };
 	}
 
 	function compileShader( c : ParsedCode, vertex : Bool ) : Code {
@@ -355,7 +356,7 @@ class Compiler {
 		varProps[v.id] = {
 			global : false,
 			read : false,
-			write : if( k == null ) fullBits(t) else switch( k ) { case VInput, VParam: fullBits(t); default: 0; },
+			write : if( k == null ) fullBits(t) else switch( k ) { case VInput, VParam, VConst: fullBits(t); default: 0; },
 			inferred : false,
 		};
 		#if neko
