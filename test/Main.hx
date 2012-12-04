@@ -68,6 +68,10 @@ class Main {
 					msg.push("    "+StringTools.rpad(a, " ", 30) + (r == a ? "is          " : "should be    ") + r);
 			}
 			Context.error(msg.join("\n"), shader.pos);
+		} else if( s.warn.length > 0 ) {
+			for( w in s.warn )
+				Context.warning(w.msg, w.p);
+			Context.error("Unexpected warnings", shader.pos);
 		}
 		return s.chk;
 	}

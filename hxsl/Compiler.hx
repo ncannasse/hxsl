@@ -540,6 +540,8 @@ class Compiler {
 		case PTex(vname, acc, flags):
 			var v = vars.get(vname);
 			if( v == null ) error("Unknown texture '" + vname + "'", e.p);
+			props(v).read = true;
+			
 			var single = false;
 			var tflags = [];
 			var modes = [];
