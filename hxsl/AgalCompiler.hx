@@ -747,7 +747,7 @@ class AgalCompiler {
 			for( e in el )
 				compileExpr(e.e, e.v);
 			return compileSrc(v);
-		case CConst(_), CVector(_), CIf(_), CFor(_), CRow(_), CCond(_): throw "assert";
+		case CConst(_), CVector(_), CIf(_), CFor(_), CRow(_), CCond(_): throw "assert "+Type.enumConstructor(e.d);
 		}
 	}
 

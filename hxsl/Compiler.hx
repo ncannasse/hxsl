@@ -108,7 +108,8 @@ class Compiler {
 		varProps = [];
 		allVars = [];
 
-		allocVar("out", VOut, TFloat4, h.pos);
+		var out = allocVar("out", VOut, TFloat4, h.pos);
+		props(out).global = true;
 
 		helpers = h.helpers;
 
@@ -146,8 +147,10 @@ class Compiler {
 			default:
 				v = allocVar(a.n, null, a.t, a.p);
 				// set Param but allow to refine as Const
-				v.kind = VParam;
-				props(v).inferred = true;
+				if( v.kind == null ) {
+					v.kind = VParam;
+					props(v).inferred = true;
+				}
 				cur.args.push(v);
 			}
 			if( namedVars.get(v.name) != null )
@@ -162,11 +165,8 @@ class Compiler {
 
 		// cleanup
 		for( v in vars )
-			if( v.kind != null )
-				switch( v.kind ) {
-				case VParam, VTmp: vars.remove(v.name);
-				default:
-				}
+			if( !props(v).global )
+				vars.remove(v.name);
 
 		return cur;
 	}

@@ -43,6 +43,7 @@ class Main {
 	
 	@:macro static function test( shader : Expr, out : String, ?params : { } ) {
 		var s = null;
+		var consts = [];
 		try {
 			s = compileShader(shader, params);
 		} catch( e : hxsl.Data.Error ) {
@@ -289,6 +290,86 @@ class Main {
 			mov t0.w, c1.y
 			mov out, t0
 		");
+		
+		test( {
+			var input : {
+				pos : Float3,
+				uv : Float2,
+			};
+			
+			var tuv : Float2;
+			
+			var useMatrixPos : Bool;
+			var uvScale : Const<Float2>;
+			var uvDelta : Const<Float2>;
+			
+			function vertex( mpos : Matrix, mproj : Matrix ) {
+				out = if( useMatrixPos ) (pos.xyzw * mpos) * mproj else pos.xyzw * mproj;
+				var t = uv;
+				if( uvScale != null ) t *= uvScale;
+				if( uvDelta != null ) t += uvDelta;
+				tuv = t;
+			}
+			
+			function fragment( tex : Texture, killAlpha : Bool, colorDelta : Float4, colorMult : Float4, colorMatrix : M44 ) {
+				var c = tex.get(tuv.xy);
+				if( killAlpha ) kill(c.a - 0.001);
+				if( colorDelta != null ) c += colorDelta;
+				if( colorMult != null ) c = c * colorMult;
+				if( colorMatrix != null ) c = c * colorMatrix;
+				out = c;
+			}
+		},"
+			m44 out, a0.xyzw, c0
+			mov t0.xy, a1.xy
+			mov v0.xy, t0.xy
+			mov v0.zw, c0.xx
+			
+			tex t0, tex0[v0.xy]
+			mov out, t0
+		");
+
+		test( {
+			var input : {
+				pos : Float3,
+				uv : Float2,
+			};
+			
+			var tuv : Float2;
+			
+			var useMatrixPos : Bool;
+			var uvScale : Const<Float2>;
+			var uvDelta : Const<Float2>;
+			
+			function vertex( mpos : Matrix, mproj : Matrix ) {
+				out = if( useMatrixPos ) (pos.xyzw * mpos) * mproj else pos.xyzw * mproj;
+				var t = uv;
+				if( uvScale != null ) t *= uvScale;
+				if( uvDelta != null ) t += uvDelta;
+				tuv = t;
+			}
+			
+			function fragment( tex : Texture, killAlpha : Bool, colorDelta : Float4, colorMult : Float4, colorMatrix : M44 ) {
+				var c = tex.get(tuv.xy);
+				if( killAlpha ) kill(c.a - 0.001);
+				if( colorDelta != null ) c += colorDelta;
+				if( colorMult != null ) c = c * colorMult;
+				if( colorMatrix != null ) c = c * colorMatrix;
+				out = c;
+			}
+		},"
+			m44 out, a0.xyzw, c1
+			mov t0.xy, a1.xy
+			mul t1.xy, t0.xy, c0.xy
+			mov v0.xy, t1.xy
+			mov v0.zw, c0.xx
+			
+			tex t0, tex0[v0.xy]
+			sub t1.w, t0.w, c0.x
+			kil t1.w
+			mul t2, t0, c0
+			mov out, t2
+		", { uvScale : 0, killAlpha : true, colorMult : 0 });
 		
 		trace(COUNT+" shaders checked");
 	}

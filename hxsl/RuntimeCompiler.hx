@@ -51,8 +51,12 @@ class RuntimeCompiler {
 	var usedVars : Array<Variable>;
 	var extraVars : Array<Variable>;
 	
+	// force replace of variables by their provided value
 	var isCond : Bool;
+	// do not force constants to be replaced by variables
+	var isConst : Bool;
 	var cur : Code;
+	var defPos : Position;
 
 	public var config : { padWrites : Bool };
 	
@@ -63,6 +67,7 @@ class RuntimeCompiler {
 	}
 	
 	function error( msg : String, pos : Position ) : Dynamic {
+		if( pos == null ) pos = defPos;
 		throw new Error(msg, pos);
 		return null;
 	}
@@ -82,6 +87,7 @@ class RuntimeCompiler {
 		usedVars = [];
 		varProps = [];
 		extraVars = [];
+		defPos = data.vertex.pos;
 		
 		var hVars = new Hash();
 		for( v in data.vars ) {
@@ -120,11 +126,12 @@ class RuntimeCompiler {
 						error("Invalid value for const " + v.name, null);
 					var index : Int = val;
 					var size = Tools.floatSize(v.type);
-					if( index < 0 || index+size >= Std.int(constData.length) )
-						error("Index is out of range for const " + v.name, null);
 					var a = [];
-					for( i in 0...size )
-						a.push(constData[i + index]);
+					for( i in 0...size ) {
+						var v = constData[i + index];
+						if( v == null ) v = 0;
+						a.push(v);
+					}
 					props(v).value = a.length == 1 ? CFloat(a[0]) : CFloats(a);
 				}
 			}
@@ -180,6 +187,7 @@ class RuntimeCompiler {
 	
 	function compileCode( c : Code ) : Code {
 		isCond = false;
+		isConst = false;
 		cur = {
 			vertex : c.vertex,
 			args : [],
@@ -395,20 +403,29 @@ class RuntimeCompiler {
 			return;
 		case CFor(it, start, end, exprs):
 			throw "TODO";
+		case CUnop(op, _):
+			switch( op ) {
+			case CKill:
+				addAssign(null,compileValue(e), e.p);
+				return;
+			default:
+			}
 		default:
 		}
 		if( v == null )
-			throw "assert";
+			throw "assert "+Type.enumConstructor(e.d);
 		var v = compileValue(v, true);
 		var e = compileValue(e);
 		cur.exprs.push({ v : v, e : e });
 	}
 	
 	function compileCond( v : CodeValue ) {
-		var old = isCond;
+		var old = isCond, oldC = isConst;
 		isCond = true;
+		isConst = true;
 		var v = compileValue(v);
 		isCond = old;
+		isConst = oldC;
 		return switch( v.d ) {
 		case CConst(c): c;
 		default: throw "assert";
@@ -419,8 +436,22 @@ class RuntimeCompiler {
 	function compileConstValue( v : CodeValue ) {
 		return switch( v.d ) {
 		case CConst(_): v;
-		default: compileValue(v);
+		default:
+			var old = isConst;
+			isConst = true;
+			v = compileValue(v);
+			isConst = old;
+			v;
 		};
+		
+	}
+	
+	function compileValueForce( v : CodeValue ) {
+		var old = isConst;
+		isConst = false;
+		v = compileValue(v);
+		isConst = old;
+		return v;
 	}
 	
 	function newVar( v : Variable, p : Position ) {
@@ -473,11 +504,14 @@ class RuntimeCompiler {
 	}
 	
 	function makeOp(op:CodeOp, e1:CodeValue, e2:CodeValue ) {
+		e1 = compileConstValue(e1);
+		e2 = compileConstValue(e2);
+		
 		var c1 = switch( e1.d ) {
 		case CConst(c): c;
 		default: null;
 		}
-		var c2 = switch( e1.d ) {
+		var c2 = switch( e2.d ) {
 		case CConst(c): c;
 		default: null;
 		}
@@ -521,16 +555,49 @@ class RuntimeCompiler {
 			case CCross:
 			}
 		}
+		// force const building
+		if( c1 != null )
+			e1 = compileValueForce(e1);
+		if( c2 != null )
+			e2 = compileValueForce(e2);
 		return COp(op, e1, e2);
+	}
+	
+	function makeUnop( op : CodeUnop, e : CodeValue ) {
+		e = compileConstValue(e);
+		switch( e.d ) {
+		case CConst(c):
+			function const(f:Float->Float) {
+				return CConst(CFloat(f(floatValue(c))));
+			}
+			switch( op ) {
+			case CNorm, CTrans, CKill:
+			case CInt: return const(function(x) return Std.int(x));
+			case CFrac: return const(function(x) return x % 1.);
+			case CExp: return const(Math.exp);
+			case CAbs: return const(Math.abs);
+			case CRsq: return const(function(x) return 1 / Math.sqrt(x));
+			case CRcp: return const(function(x) return 1 / x);
+			case CLog: return const(Math.log);
+			case CSqrt: return const(Math.sqrt);
+			case CSin: return const(Math.sin);
+			case CCos: return const(Math.cos);
+			case CSat: return const(Math.cos);
+			case CNeg: return const(function(x) return -x);
+			case CLen: return const(function(x) return x);
+			case CNot:
+				return CConst(CBool(!isTrue(c)));
+			}
+			e = compileValueForce(e);
+		default:
+		}
+		return CUnop(op, e);
 	}
 	
 	function compileValue( e : CodeValue, isTarget = false ) : CodeValue {
 		var d = switch( e.d ) {
 		case CConst(c):
-			if( isCond )
-				e.d;
-			else
-				allocConst([floatValue(c)], e.p).d;
+			e.d;
 		case CVar(v, swiz):
 			var v = newVar(v, e.p);
 			var p = props(v);
@@ -544,8 +611,6 @@ class RuntimeCompiler {
 				CVar(v, swiz);
 			}
 		case COp(op, e1, e2):
-			var e1 = compileValue(e1);
-			var e2 = compileValue(e2);
 			makeOp(op, e1, e2);
 		case CTex(v, acc, mode):
 			v = newVar(v, e.p); // texture
@@ -589,10 +654,19 @@ class RuntimeCompiler {
 				return compileValue(eif);
 			return compileValue(eelse);
 		case CVector(vals):
-			return compileVector(vals,e.p);
+			return compileVector(vals, e.p);
+		case CUnop(op, e):
+			makeUnop(op, e);
 		default:
 			throw "assert "+Type.enumConstructor(e.d);
 		}
+		// translate the constant to the corresponding variable value
+		if( !isConst )
+			switch( d ) {
+			case CConst(c):
+				d = allocConst([floatValue(c)], e.p).d;
+			default:
+			}
 		return { d : d, t : e.t, p : e.p };
 	}
 	
