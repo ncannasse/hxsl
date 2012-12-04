@@ -81,7 +81,7 @@ typedef Variable = {
 	var name : String;
 	var type : VarType;
 	var kind : VarKind;
-	var _index : Int;
+	var index : Int;
 	var pos : Position;
 }
 
@@ -133,8 +133,9 @@ enum CodeUnop {
 enum Const {
 	CNull;
 	CInt( i : Int );
-	CFloat( v : Float );
 	CBool( b : Bool );
+	CFloat( v : Float );
+	CFloats( v : Array<Float> );
 }
 
 enum CodeValueDecl {
@@ -144,14 +145,17 @@ enum CodeValueDecl {
 	CAccess( v : Variable, idx : CodeValue );
 	CTex( v : Variable, acc : CodeValue, mode : Array<{ f : CodeTexFlag, p : Position }> );
 	CSwiz( e : CodeValue, swiz : Array<Comp> );
+	CSubBlock( tmpExpr : CodeBlock, v : CodeValue );
 	// used in intermediate representation only
 	CConst( c : Const );
-	CIf( cond : CodeValue, eif : Array<{v:CodeValue, e:CodeValue}>, eelse : Null<Array<{v:CodeValue, e:CodeValue}>> );
+	CIf( cond : CodeValue, eif : CodeBlock, eelse : Null<CodeBlock> );
 	CCond( cond : CodeValue, eif : CodeValue, eelse : CodeValue );
-	CFor( iterator : Variable, start : CodeValue, end : CodeValue, exprs : Array<{v:CodeValue, e:CodeValue}> );
+	CFor( iterator : Variable, start : CodeValue, end : CodeValue, exprs : CodeBlock );
 	CVector( vals : Array<CodeValue> );
 	CRow( e1 : CodeValue, e2 : CodeValue );
 }
+
+typedef CodeBlock = Array<{ v: Null<CodeValue>, e:CodeValue }>;
 
 enum CodeTexFlag {
 	CTFlag( t : TexFlag );
@@ -170,7 +174,7 @@ typedef Code = {
 	var args : Array<Variable>;
 	var consts : Array<Array<Float>>;
 	var tex : Array<Variable>;
-	var exprs : Array<{ v : Null<CodeValue>, e : CodeValue }>;
+	var exprs : CodeBlock;
 	var tempSize : Int;
 }
 

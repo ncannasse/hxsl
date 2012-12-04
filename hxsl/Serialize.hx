@@ -117,6 +117,7 @@ class Serialize {
 			case CBool(b): s.serialize(b);
 			case CInt(i): s.serialize(i);
 			case CFloat(f): s.serialize(f);
+			case CFloats(a): s.serialize(a);
 			}
 		case CVar(v, swiz):
 			serializeVar(v);
@@ -138,6 +139,13 @@ class Serialize {
 		case CSwiz(e, swiz):
 			serializeCodeValue(e);
 			serializeSwiz(swiz);
+		case CSubBlock(tmp, v):
+			s.serialize(tmp.length);
+			for( expr in tmp ) {
+				serializeCodeValue(expr.v);
+				serializeCodeValue(expr.e);
+			}
+			serializeCodeValue(v);
 		case CIf(cond, eif, eelse):
 			serializeCodeValue(cond);
 			s.serialize(eif.length);

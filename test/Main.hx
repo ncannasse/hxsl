@@ -30,17 +30,14 @@ class Main {
 		var warnings = [];
 		// warning as errors
 		c.warn = function(msg, p) warnings.push({ msg : msg, p : p });
-		c.compile(p);
-		return { warn : warnings, str : null, chk : null };
-		/*
+		var data = c.compile(p);
 		data = new hxsl.RuntimeCompiler().compile(data, params);
 		var vert = new hxsl.AgalCompiler().compile(data.vertex);
 		var frag = new hxsl.AgalCompiler().compile(data.fragment);
 		var vexpr = { expr : EConst(CString(haxe.Serializer.run(agalToBytes(vert)))), pos : shader.pos };
 		var fexpr = { expr : EConst(CString(haxe.Serializer.run(agalToBytes(frag)))), pos : shader.pos };
 		var chk = macro testRuntimeShader($vexpr,$fexpr);
-		return { str : agalToString(vert) + "\n\n" + agalToString(frag), chk : chk };
-		*/
+		return { str : agalToString(vert) + "\n\n" + agalToString(frag), warn : warnings, chk : chk };
 	}
 	#end
 	
@@ -56,8 +53,21 @@ class Main {
 		if( s.str == null )
 			return macro null;
 		var out = StringTools.trim(out.split("\r\n").join("\n").split("\t").join(""));
-		if( s.str != out )
-			Context.error("Wrong AGAL output :\n" + s.str, shader.pos);
+		if( s.str != out ) {
+			var msg = ["Wrong AGAL output :"];
+			var req = out.split("\n");
+			var asm = s.str.split("\n");
+			for( i in 0...(req.length > asm.length ? req.length : asm.length) ) {
+				var r = req[i], a = asm[i];
+				if( r == null ) r = "";
+				if( a == null ) a = "";
+				if( r == "" && a == "" )
+					msg.push("");
+				else
+					msg.push("    "+StringTools.rpad(a, " ", 30) + (r == a ? "is          " : "should be    ") + r);
+			}
+			Context.error(msg.join("\n"), shader.pos);
+		}
 		return s.chk;
 	}
 	
@@ -160,8 +170,19 @@ class Main {
 			}
 			function fragment() { out = [1, 2, 3, 4]; }
 		},"
+			mov out, a0
+			
+			mov out, c0.xyzw
 		");
 		
+		test( {
+			function vertex( a : Float4 ) {
+				out = a;
+			}
+			function fragment( a : Float4 ) {
+				out = a;
+			}
+		},"Duplicate variable a");
 
 		// invalid const usage
 		error( {
@@ -236,16 +257,38 @@ class Main {
 		test( {
 			function vertex() {
 				if( true ) {
-					out = [1, 2, 3, 4];
-				} else {
 					out.xyz = [1,1,1];
+				} else {
+					out = [1, 2, 3, 4];
 				}
 				out.w = 0;
 			}
 			function fragment() {
 				out = [1, 2, 3, 4];
 			}
-		},"");
+		},"
+			mov out.xyz, c0.xxx
+			mov out.w, c0.y
+
+			mov out, c0.xyzw
+		");
+
+		test( {
+			function vertex() {
+				out = [0, 0, 0, 0];
+			}
+			function fragment( a : Float4, b : Float4 ) {
+				out = [a.x, a.y, b.x, b.y];
+			}
+		},"
+			mov out, c0.xxxx
+			
+			mov t0.x, c0.x
+			mov t0.y, c0.y
+			mov t0.z, c1.x
+			mov t0.w, c1.y
+			mov out, t0
+		");
 		
 		trace(COUNT+" shaders checked");
 	}

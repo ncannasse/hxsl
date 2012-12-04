@@ -69,7 +69,7 @@ class Unserialize {
 				type:type,
 				kind:kind,
 				pos:pos,
-				_index:0,
+				index:0,
 			};
 			vars.set(v.id, v);
 			if( v.kind != VTmp )
@@ -139,15 +139,24 @@ class Unserialize {
 			var swiz = unserializeSwiz();
 			CSwiz(e, swiz);
 		case 6:
+			var exprs = [];
+			for( i in 0...s.unserialize() )
+				exprs.push( {
+					v : unserializeCodeValue(),
+					e : unserializeCodeValue(),
+				});
+			CSubBlock(exprs, unserializeCodeValue());
+		case 7:
 			CConst(switch( s.unserialize() ) {
 			case 0: CNull;
 			case 1: CInt(s.unserialize());
-			case 2: CFloat(s.unserialize());
-			case 3: CBool(s.unserialize());
+			case 2: CBool(s.unserialize());
+			case 3: CFloat(s.unserialize());
+			case 4: CFloats(s.unserialize());
 			default:
 				throw "assert";
 			});
-		case 7:
+		case 8:
 			var cond = unserializeCodeValue();
 			var eifLen:Int = s.unserialize();
 			var eif = [];
@@ -167,12 +176,12 @@ class Unserialize {
 				}
 			}
 			CIf(cond, eif, eelse);
-		case 8:
+		case 9:
 			var cond = unserializeCodeValue();
 			var e1 = unserializeCodeValue();
 			var e2 = unserializeCodeValue();
 			CCond(cond, e1, e2);
-		case 9:
+		case 10:
 			var it = unserializeVar();
 			var start = unserializeCodeValue();
 			var end = unserializeCodeValue();
@@ -184,7 +193,7 @@ class Unserialize {
 				exprs.push( {v : v, e : e} );
 			}
 			CFor(it, start, end, exprs);
-		case 10:
+		case 11:
 			var numVals = s.unserialize();
 			var vals = [];
 			for ( i in 0...numVals ) vals.push(unserializeCodeValue());

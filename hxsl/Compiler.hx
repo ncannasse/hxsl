@@ -38,10 +38,10 @@ class Compiler {
 
 	var cur : Code;
 	var vars : Hash<Variable>;
+	var namedVars : Hash<Variable>;
 	var allVars : Array<Variable>;
 	var varProps : Array<VarProps>;
 	var ops : Array<Array<{ p1 : VarType, p2 : VarType, r : VarType }>>;
-	var varCount : Int;
 	var helpers : Hash<Data.ParsedCode>;
 	var ret : { v : CodeValue };
 	var allowTextureRead : Bool;
@@ -49,9 +49,6 @@ class Compiler {
 	public var allowAllWMasks : Bool;
 
 	public function new() {
-		varCount = 0;
-		vars = new Hash();
-		varProps = [];
 		allowAllWMasks = false;
 		ops = new Array();
 		for( o in initOps() )
@@ -106,12 +103,20 @@ class Compiler {
 	}
 
 	public function compile( h : ParsedHxsl ) : Data {
+		vars = new Hash();
+		namedVars = new Hash();
+		varProps = [];
+		allVars = [];
+
 		allocVar("out", VOut, TFloat4, h.pos);
 
 		helpers = h.helpers;
 
 		for( v in h.vars ) {
 			var v = allocVar(v.n, v.k, v.t, v.p);
+			if( namedVars.get(v.name) != null )
+				error("Duplicate variable "+v.name,v.pos);
+			namedVars.set(v.name, v);
 			props(v).global = true;
 		}
 
@@ -131,18 +136,24 @@ class Compiler {
 			tex : [],
 			tempSize : 0,
 		};
-		for( v in c.args )
-			switch( v.t ) {
+		for( a in c.args ) {
+			var v;
+			switch( a.t ) {
 			case TTexture(_):
-				if( cur.vertex ) error("You can't use a texture inside a vertex shader", v.p);
-				cur.tex.push(allocVar(v.n, VTexture, v.t, v.p));
+				if( cur.vertex ) error("You can't use a texture inside a vertex shader", a.p);
+				v = allocVar(a.n, VTexture, a.t, a.p);
+				cur.tex.push(v);
 			default:
-				var v = allocVar(v.n, null, v.t, v.p);
+				v = allocVar(a.n, null, a.t, a.p);
 				// set Param but allow to refine as Const
 				v.kind = VParam;
 				props(v).inferred = true;
 				cur.args.push(v);
 			}
+			if( namedVars.get(v.name) != null )
+				error("Duplicate variable "+v.name,v.pos);
+			namedVars.set(v.name, v);
+		}
 
 		for( e in c.exprs )
 			compileAssign(e.v, e.e, e.p);
@@ -334,11 +345,11 @@ class Compiler {
 		if( k == null && t == TBool )
 			k = VConst;
 		var v : Variable = {
-			id : varCount++,
+			id : allVars.length,
 			name : name,
 			type : t,
 			kind : k,
-			_index : 0,
+			index : 0,
 			pos : p,
 		};
 		varProps[v.id] = {
@@ -351,6 +362,7 @@ class Compiler {
 		untyped v.__string = function() return neko.NativeString.ofString(__this__.name + "#" + __this__.id+" : "+Tools.typeStr(__this__.type));
 		#end
 		vars.set(name, v);
+		allVars.push(v);
 		return v;
 	}
 
@@ -404,15 +416,6 @@ class Compiler {
 					warn("Unused texture " + v.name, p);
 			}
 		}
-	}
-
-	function isGoodSwiz( s : Array<Comp> ) {
-		if( s == null ) return true;
-		var cur = 0;
-		for( x in s )
-			if( Type.enumIndex(x) != cur++ )
-				return false;
-		return true;
 	}
 
 	function isUnsupportedWriteMask( s : Array<Comp> ) {
@@ -477,6 +480,10 @@ class Compiler {
 			case CNull: TNull;
 			case CInt(_), CFloat(_): TFloat;
 			case CBool(_): TBool;
+			case CFloats(ar):
+				if( ar.length == 0 || ar.length > 4 )
+					error("Floats must contain 1-4 values", e.p);
+				Tools.makeFloat(ar.length);
 			}
 			return { d : CConst(c), t : t, p : e.p };
 		case PLocal(v):
@@ -553,8 +560,8 @@ class Compiler {
 					var v = compileValue(v);
 					param = p;
 					var t = switch( p ) {
-					case PMipMap, PLodBias: TFloat;
-					case PSingle, PWrap, PFilter: TBool;
+					case PLodBias: TFloat;
+					case PMipMap, PSingle, PWrap, PFilter: TBool;
 					}
 					unify(v.t, t, v.p);
 				}

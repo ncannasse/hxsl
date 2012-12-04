@@ -93,7 +93,7 @@ class AgalCompiler {
 		case VInput: RAttr;
 		case VTexture, VConst: throw "assert";
 		}
-		return { t : t, index : v._index, swiz : swiz, access : null };
+		return { t : t, index : v.index, swiz : swiz, access : null };
 	}
 
 	function delta( r : Reg, n : Int, ?s) : Reg {
@@ -199,8 +199,8 @@ class AgalCompiler {
 				compileTo(t, e);
 				mov(d, t, v.t);
 				return;
-			case CVar(_), CSwiz(_), CBlock(_), CAccess(_):
-			case CConst(_), CLiteral(_), CVector(_), CIf(_), CFor(_): throw "assert";
+			case CVar(_), CSwiz(_), CAccess(_), CSubBlock(_):
+			case CConst(_), CVector(_), CIf(_), CFor(_), CRow(_), CCond(_): throw "assert";
 			}
 		compileTo(d, e);
 	}
@@ -718,12 +718,12 @@ class AgalCompiler {
 				case CTParam(_):
 					throw "asset";
 				}
-			code.push(OTex(dst, vtmp, { index : v._index, flags : tflags } ));
-		case CBlock(el, v):
+			code.push(OTex(dst, vtmp, { index : v.index, flags : tflags } ));
+		case CSubBlock(el, v):
 			for( e in el )
 				compileExpr(e.e, e.v);
 			compileTo(dst,v);
-		case CConst(_), CLiteral(_), CVector(_), CIf(_), CFor(_):
+		case CConst(_), CVector(_), CIf(_), CFor(_), CRow(_), CCond(_):
 			throw "assert";
 		}
 	}
@@ -739,15 +739,15 @@ class AgalCompiler {
 			var t = allocTemp(e.t);
 			compileTo(t, e);
 			return t;
-		case CBlock(el, v):
-			for( e in el )
-				compileExpr(e.e, e.v);
-			return compileSrc(v);
 		case CAccess(v1, e2):
 			var r1 = reg(v1);
 			var r2 = compileSrc(e2);
 			return { t : r2.t, index : r2.index, access : { t : r1.t, comp : r2.swiz[0], offset : r1.index }, swiz : initSwiz(e.t) };
-		case CConst(_), CLiteral(_), CVector(_), CIf(_), CFor(_): throw "assert";
+		case CSubBlock(el, v):
+			for( e in el )
+				compileExpr(e.e, e.v);
+			return compileSrc(v);
+		case CConst(_), CVector(_), CIf(_), CFor(_), CRow(_), CCond(_): throw "assert";
 		}
 	}
 
