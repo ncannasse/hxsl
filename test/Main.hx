@@ -294,7 +294,7 @@ class Main {
 			mov t0.w, c1.y
 			mov out, t0
 		");
-		
+
 		test( {
 			var input : {
 				pos : Float3,
@@ -324,10 +324,10 @@ class Main {
 				out = c;
 			}
 		},"
-			m44 out, a0.xyzw, c1
+			m44 out, a0.xyzw, c0
 			mov t0.xy, a1.xy
 			mov v0.xy, t0.xy
-			mov v0.zw, c0.xx
+			mov v0.zw, c4.xx
 			
 			tex t0, tex0[v0.xy]
 			mov out, t0
@@ -362,16 +362,16 @@ class Main {
 				out = c;
 			}
 		},"
-			m44 out, a0.xyzw, c2
+			m44 out, a0.xyzw, c1
 			mov t0.xy, a1.xy
-			mul t1.xy, t0.xy, c1.xy
+			mul t1.xy, t0.xy, c0.xy
 			mov v0.xy, t1.xy
-			mov v0.zw, c0.xx
+			mov v0.zw, c5.xx
 			
 			tex t0, tex0[v0.xy]
-			sub t1.w, t0.w, c0.x
+			sub t1.w, t0.w, c1.x
 			kil t1.w
-			mul t2, t0, c1
+			mul t2, t0, c0
 			mov out, t2
 		", { uvScale : 0, killAlpha : true, colorMult : 0 });
 
@@ -384,13 +384,13 @@ class Main {
 				out = [1,1,1,1];
 			}
 		},"
-			add t0, a0, c0.xxxx
-			mul t1, t0, c0.yyyy
-			add out, t1, c1
+			add t0, a0, c1.xxxx
+			mul t1, t0, c1.yyyy
+			add out, t1, c0
 			
 			mov out, c0.xxxx
 		");
-			
+
 		trace(COUNT+" shaders checked");
 	}
 	

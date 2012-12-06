@@ -51,6 +51,7 @@ class RuntimeCompiler {
 	var varProps : Array<VarProps>;
 	var usedVars : Array<Variable>;
 	var extraVars : Array<Variable>;
+	var varId : Int;
 	
 	// force replace of variables by their provided value
 	var isCond : Bool;
@@ -62,6 +63,7 @@ class RuntimeCompiler {
 	public var config : { padWrites : Bool };
 	
 	public function new() {
+		varId = 0;
 		config = {
 			padWrites : true,
 		};
@@ -142,11 +144,17 @@ class RuntimeCompiler {
 			}
 		
 		var vertex = compileCode(data.vertex);
+		var vextra = extraVars;
+		extraVars = [];
+		
 		var fragment = compileCode(data.fragment);
+		var fextra = extraVars;
+		extraVars = [];
+		
 		usedVars.sort(sortById);
 		
-		indexVars(vertex);
-		indexVars(fragment);
+		indexVars(vertex, vextra);
+		indexVars(fragment, fextra);
 		
 		var globals = [];
 		for( v in usedVars ) {
@@ -166,9 +174,8 @@ class RuntimeCompiler {
 		return s != null && s.length > 1 && (s[0] != X || s[1] != Y || (s.length > 2 && (s[2] != Z || (s.length > 3 && s[3] != W))));
 	}
 	
-	function indexVars( c : Code ) {
+	function indexVars( c : Code, extraVars : Array<Variable> ) {
 		var indexes = [0, 0, 0, 0, 0, 0];
-		indexes[Type.enumIndex(VParam)] = c.consts.length;
 		for( v in usedVars ) {
 			var p = props(v);
 			if( p.isVertex == c.vertex ) {
@@ -189,6 +196,12 @@ class RuntimeCompiler {
 				}
 			}
 		}
+		// move consts at the end
+		var cdelta = indexes[Type.enumIndex(VParam)];
+		for( v in extraVars )
+			if( v.kind == VParam )
+				v.index += cdelta;
+		
 		c.tempSize = indexes[Type.enumIndex(VTmp)];
 	}
 	
@@ -292,7 +305,8 @@ class RuntimeCompiler {
 	}
 	
 	function allocVar(name, k, t, p) {
-		var id = -(extraVars.length + 1);
+		var id = -(varId + 1);
+		varId++;
 		var v : Variable = {
 			id : id,
 			name : name,
@@ -307,7 +321,7 @@ class RuntimeCompiler {
 	
 	function makeConst(index:Int, swiz, p) {
 		var v = allocVar("$c" + index, VParam, TFloat4, p);
-		v.index  = index;
+		v.index = index;
 		return { d : CVar(v, swiz), t : Tools.makeFloat(swiz.length), p : p };
 	}
 	
