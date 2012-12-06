@@ -318,5 +318,14 @@ class Tools {
 			default: throw "assert";
 		};
 	}
+	
+	public static function getAllVars( hx : Data ) {
+		var all = hx.globals.concat(hx.vertex.args).concat(hx.fragment.args);
+		for( v in hx.vertex.tex )
+			all.push(v);
+		for( v in hx.fragment.tex )
+			all.push(v);
+		return all;
+	}
 
 }

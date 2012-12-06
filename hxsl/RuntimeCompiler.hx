@@ -102,7 +102,7 @@ class RuntimeCompiler {
 		varProps = [];
 		extraVars = [];
 		defPos = data.vertex.pos;
-		
+			
 		var hVars = new Hash();
 		for( v in data.globals.concat(data.vertex.args).concat(data.fragment.args) )
 			switch( v.kind ) {
@@ -134,7 +134,7 @@ class RuntimeCompiler {
 					var a = [];
 					for( i in 0...size ) {
 						var v = constData[i + index];
-						if( v == null ) v = 0;
+						#if !flash if( v == null ) v = 0; #end
 						a.push(v);
 					}
 					props(v).value = a.length == 1 ? CFloat(a[0]) : CFloats(a);
@@ -168,6 +168,7 @@ class RuntimeCompiler {
 	
 	function indexVars( c : Code ) {
 		var indexes = [0, 0, 0, 0, 0, 0];
+		indexes[Type.enumIndex(VParam)] = c.consts.length;
 		for( v in usedVars ) {
 			var p = props(v);
 			if( p.isVertex == c.vertex ) {
@@ -179,6 +180,7 @@ class RuntimeCompiler {
 				switch( v.kind ) {
 				case VParam:
 					c.args.push(v);
+					props(v).global = false; // remove from global list
 				case VTexture:
 					c.tex.push(v);
 				case VConst:
@@ -299,7 +301,6 @@ class RuntimeCompiler {
 			index : -1,
 			pos : p,
 		};
-		props(v).isVertex = cur.vertex;
 		extraVars.push(v);
 		return v;
 	}
@@ -337,7 +338,7 @@ class RuntimeCompiler {
 				dvals.push(cvals[i]);
 			}
 		}
-
+		
 		// find an already existing constant
 		for( index in 0...cur.consts.length ) {
 			var c = cur.consts[index];
@@ -462,6 +463,8 @@ class RuntimeCompiler {
 				throw "assert";
 			return v;
 		}
+		if( v.id < 0 )
+			return v;
 		var p = props(v);
 		if( p.newVar == null ) {
 			var kind = v.kind;
@@ -480,7 +483,7 @@ class RuntimeCompiler {
 		return p.newVar;
 	}
 	
-	function compare(c1:Const, c2:Const) {
+	function compare(c1:Const, c2:Const) : Null<Int> {
 		var f1, f2;
 		switch( c1 ) {
 		case CFloat(f): f1 = f;
@@ -558,10 +561,8 @@ class RuntimeCompiler {
 			}
 		}
 		// force const building
-		if( c1 != null )
-			e1 = compileValueForce(e1);
-		if( c2 != null )
-			e2 = compileValueForce(e2);
+		e1 = compileValueForce(e1);
+		e2 = compileValueForce(e2);
 		return COp(op, e1, e2);
 	}
 	
@@ -590,9 +591,9 @@ class RuntimeCompiler {
 			case CNot:
 				return CConst(CBool(!isTrue(c)));
 			}
-			e = compileValueForce(e);
 		default:
 		}
+		e = compileValueForce(e);
 		return CUnop(op, e);
 	}
 	
@@ -659,6 +660,24 @@ class RuntimeCompiler {
 			return compileVector(vals, e.p);
 		case CUnop(op, e):
 			makeUnop(op, e);
+		case CSwiz(v, swiz):
+			v = compileValue(v, isTarget);
+			// build swizzling
+			switch( v.d ) {
+			case CVar(v, s2):
+				var ns;
+				if( s2 == null )
+					ns = swiz;
+				else {
+					// combine swizzlings
+					ns = [];
+					for( s in swiz )
+						ns.push(s2[Type.enumIndex(s)]);
+				}
+				return { d : CVar(v, ns), t : Tools.makeFloat(swiz.length), p : e.p };
+			default:
+				return { d : CSwiz(v, swiz), t : Tools.makeFloat(swiz.length), p : e.p };
+			}
 		default:
 			throw "assert "+Type.enumConstructor(e.d);
 		}

@@ -118,7 +118,7 @@ class Main {
 	}
 
 	static function checkShaders() {
-		
+
 		// basic shader
 		test({
 			var input : {
@@ -324,7 +324,7 @@ class Main {
 				out = c;
 			}
 		},"
-			m44 out, a0.xyzw, c0
+			m44 out, a0.xyzw, c1
 			mov t0.xy, a1.xy
 			mov v0.xy, t0.xy
 			mov v0.zw, c0.xx
@@ -362,19 +362,35 @@ class Main {
 				out = c;
 			}
 		},"
-			m44 out, a0.xyzw, c1
+			m44 out, a0.xyzw, c2
 			mov t0.xy, a1.xy
-			mul t1.xy, t0.xy, c0.xy
+			mul t1.xy, t0.xy, c1.xy
 			mov v0.xy, t1.xy
 			mov v0.zw, c0.xx
 			
 			tex t0, tex0[v0.xy]
 			sub t1.w, t0.w, c0.x
 			kil t1.w
-			mul t2, t0, c0
+			mul t2, t0, c1
 			mov out, t2
 		", { uvScale : 0, killAlpha : true, colorMult : 0 });
-		
+
+		test( {
+			var pos : Input<Float4>;
+			function vertex( delta : Float4 ) {
+				out = (pos + 0.001) * 0.002 + delta;
+			}
+			function fragment() {
+				out = [1,1,1,1];
+			}
+		},"
+			add t0, a0, c0.xxxx
+			mul t1, t0, c0.yyyy
+			add out, t1, c1
+			
+			mov out, c0.xxxx
+		");
+			
 		trace(COUNT+" shaders checked");
 	}
 	
