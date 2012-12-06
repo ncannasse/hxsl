@@ -110,10 +110,10 @@ class RuntimeCompiler {
 			switch( v.kind ) {
 			case VParam, VConst:
 				hVars.set(v.name, v);
+			case VInput:
+				props(v).global = true;
 			default:
 			}
-		if( constData == null )
-			constData = #if flash new flash.Vector() #else new Array() #end;
 		if( consts != null )
 			for( f in Reflect.fields(consts) ) {
 				var v = hVars.get(f);
@@ -135,7 +135,7 @@ class RuntimeCompiler {
 					var size = Tools.floatSize(v.type);
 					var a = [];
 					for( i in 0...size ) {
-						var v = constData[i + index];
+						var v = constData == null ? 0 : constData[i + index];
 						#if !flash if( v == null ) v = 0; #end
 						a.push(v);
 					}
