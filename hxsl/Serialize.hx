@@ -63,11 +63,11 @@ class Serialize {
 	function serializeCode( code:Code ) {
 		s.serialize(code.args.length);
 		for( arg in code.args )
-			s.serialize(arg.id);
+			serializeVar(arg);
 		if( !code.vertex ) {
 			s.serialize(code.tex.length);
 			for ( tex in code.tex )
-				s.serialize(tex.id);
+				serializeVar(tex);
 		}
 
 		s.serialize(code.exprs.length);
@@ -136,7 +136,7 @@ class Serialize {
 				serializeCodeValue(expr.e);
 			}
 		case CFor(it, start, end, exprs):
-			s.serialize(it.id);
+			serializeVar(it);
 			serializeCodeValue(start);
 			serializeCodeValue(end);
 			s.serialize(exprs.length);

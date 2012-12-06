@@ -53,22 +53,17 @@ class Unserialize {
 	}
 
 	function unserializeCode( vertex:Bool ) : Code {
-		var numArgs = s.unserialize();
 		var args = [];
-		for ( i in 0...numArgs )
+		for( i in 0...s.unserialize() )
 			args.push( unserializeVar() );
 		var tex = [];
-		if ( !vertex ) {
-			var numTex = s.unserialize();
-			for ( i in 0...numTex )
+		if( !vertex ) {
+			for( i in 0...s.unserialize() )
 				tex.push( unserializeVar() );
 		}
-
-		var numExprs = s.unserialize();
 		var exprs = [];
-		for ( i in 0...numExprs )
-			exprs.push( {v:unserializeCodeValue(), e:unserializeCodeValue()} );
-
+		for( i in 0...s.unserialize() )
+			exprs.push( { v:unserializeCodeValue(), e:unserializeCodeValue() } );
 		var consts:Array<Array<Float>> = s.unserialize();
 		var pos = unserializePos();
 		return { pos:pos, args:args, tex:tex, exprs:exprs, consts:consts, vertex:vertex, tempSize:0 };
@@ -210,15 +205,15 @@ class Unserialize {
 		var typeIndex:Null<Int> = s.unserialize();
 		if ( typeIndex == null ) return null;
 		switch ( typeIndex ) {
-		case 6:
+		case Type.enumIndex(TMatrix(0,0,null)):
 			var r:Int = s.unserialize();
 			var c:Int = s.unserialize();
 			var transpose = s.unserialize();
 			return TMatrix(r,c,{t:transpose});
-		case 7:
+		case Type.enumIndex(TTexture(true)):
 			var cube = s.unserialize();
 			return TTexture(cube);
-		case 8:
+		case Type.enumIndex(TArray(null,0)):
 			var type = unserializeVarType();
 			var size = s.unserialize();
 			return TArray(type, size);
