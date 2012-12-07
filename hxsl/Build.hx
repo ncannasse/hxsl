@@ -35,6 +35,7 @@ class Build {
 	#if macro
 	static function realType( t : VarType ) {
 		return switch( t ) {
+		case TNull: throw "assert";
 		case TBool: "Bool";
 		case TFloat: "Float";
 		case TFloat2, TFloat3, TFloat4: "flash.geom.Vector3D";
@@ -60,7 +61,7 @@ class Build {
 			inf.vars.push(c.name + " : " + t);
 			function addType( n : String, t : VarType )	{
 				switch( t ) {
-				case TBool:
+				case TBool, TNull:
 					throw "assert";
 				case TFloat:
 					add(n);
@@ -153,7 +154,7 @@ class Build {
 		var p = new Parser();
 		p.includeFile = function(file) {
 			var f = Context.resolvePath(file);
-			return Context.parse("{"+neko.io.File.getContent(f)+"}", Context.makePosition( { min : 0, max : 0, file : f } ));
+			return Context.parse("{"+sys.io.File.getContent(f)+"}", Context.makePosition( { min : 0, max : 0, file : f } ));
 		};
 		var v = try p.parse(shader) catch( e : Error ) haxe.macro.Context.error(e.message, e.pos);
 		var c = new Compiler();
@@ -163,7 +164,7 @@ class Build {
 		v = new RuntimeCompiler().compile(v, { } );
 
 		var c = new hxsl.AgalCompiler();
-		c.error = Context.error;
+		c.error = function(msg, pos) { Context.error(msg, pos); return null; };
 
 		var vscode = c.compile(v.vertex);
 		var fscode = c.compile(v.fragment);
@@ -193,7 +194,7 @@ class Build {
 
 		var bindCode =
 			"bindInit(buf);\n" +
-			Lambda.map(v.vars, function(v) return v.kind == VInput ? "bindReg(" + (v.type == TInt ? 0 : Tools.floatSize(v.type)) + ");\n" : "").join("") +
+			Lambda.map(v.globals, function(v) return v.kind == VInput ? "bindReg(" + (v.type == TInt ? 0 : Tools.floatSize(v.type)) + ");\n" : "").join("") +
 			"bindDone();\n"
 		;
 

@@ -6,6 +6,26 @@ import hxsl.Serialize;
 import haxe.macro.Context;
 #end
 
+#if !macro
+class TestShader extends hxsl.Shader {
+	static var SRC = {
+		var input : {
+			pos : Float3,
+			uv : Float2,
+		};
+		var tuv : Float2;
+		function vertex( mproj : Matrix ) {
+			var tmp = pos.xyzw * mproj;
+			out = tmp;
+			tuv = uv;
+		}
+		function fragment( tex : Texture ) {
+			out = tex.get(tuv);
+		}
+	}
+}
+#end
+
 class Main {
 	
 	static var COUNT = 0;
