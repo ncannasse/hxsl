@@ -183,6 +183,10 @@ class Unserialize {
 			var vals = [];
 			for ( i in 0...numVals ) vals.push(unserializeCodeValue());
 			CVector(vals);
+		case 12:
+			var e1 = unserializeCodeValue();
+			var e2 = unserializeCodeValue();
+			CRow(e1, e2);
 		default:
 			throw "assert";
 		}

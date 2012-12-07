@@ -411,9 +411,9 @@ class Compiler {
 			case VParam:
 				if( !vp.read ) warn("Parameter '" + v.name + "' not used" + (vp.global ? "" :" by " + shader), p);
 			case VConst:
-				if( !vp.read ) warn("Unused compile time constant '" + v.name + "'", p);
+				if( !cur.vertex && !vp.read ) warn("Unused compile time constant '" + v.name + "'", p);
 			case VTexture:
-				if( !vp.read )
+				if( !cur.vertex && !vp.read )
 					warn("Unused texture " + v.name, p);
 			}
 		}
@@ -465,7 +465,7 @@ class Compiler {
 		return null;
 	}
 	
-	function compileValue( e : ParsedValue, ?isTarget ) : CodeValue {
+	function compileValue( e : ParsedValue, ?isTarget : Bool ) : CodeValue {
 		switch( e.v ) {
 		case PBlock(_), PReturn(_):
 			throw "assert";
@@ -567,6 +567,7 @@ class Compiler {
 					case PMipMap, PSingle, PWrap, PFilter: TBool;
 					}
 					unify(v.t, t, v.p);
+					tflags.push( { f : CTParam(p, v), p : f.p } );
 				}
 				if( modes[Type.enumIndex(param)] )
 					error("Duplicate or conflicting texture flag", f.p);
@@ -795,6 +796,9 @@ class Compiler {
 		var e = compileValue(e);
 		var rt = e.t;
 		switch( op ) {
+		case CNot:
+			unify(e.t, TBool, e.p);
+			return { d : CUnop(op, e), t : TBool, p : p };
 		case CNorm: rt = TFloat3;
 		case CLen: rt = TFloat;
 		case CTrans:
