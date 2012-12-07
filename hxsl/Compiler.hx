@@ -343,8 +343,15 @@ class Compiler {
 	}
 
 	function allocVar( name, k, t, p ) {
-		if( k == null && t == TBool )
-			k = VConst;
+		if( k == null ) {
+			switch( t ) {
+			case TBool:
+				k = VConst;
+			case TTexture(_):
+				k = VTexture;
+			default:
+			}
+		}
 		var v : Variable = {
 			id : allVars.length,
 			name : name,
