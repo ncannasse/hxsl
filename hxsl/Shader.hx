@@ -287,6 +287,22 @@ class Shader {
 		}
 	}
 	
+	public function unbind( ctx : flash.display3D.Context3D ) {
+		var i = instance;
+		if( i == null )
+			return;
+		for( k in 0...i.textures.length )
+			ctx.setTextureAt(k, i.textures[k]);
+		var pos = 0, offset = 0;
+		var bits = i.bufferFormat;
+		while( offset < i.stride ) {
+			var size = bits & 7;
+			ctx.setVertexBufferAt(pos++, null);
+			offset += size == 0 ? 1 : size;
+			bits >>= 3;
+		}
+	}
+	
 	function updateParams() {
 		// copy vars from our local shader to the instance
 		updateVertexParams(instance.vertexVars, instance.vertexMap);
