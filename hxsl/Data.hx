@@ -244,6 +244,7 @@ typedef ParsedHxsl = {
 typedef Error = haxe.macro.Expr.Error;
 
 class Tools {
+
 	public static function swizBits( s : Array<Comp>, t : VarType ) {
 		if( s == null ) return fullBits(t);
 		var b = 0;
@@ -284,7 +285,7 @@ class Tools {
 			if( t.t == null )
 				w < h ? w : h;
 			else
-				t.t ? h : w;
+				t.t ? w : h;
 		case TArray(t, size):
 			regSize(t) * size;
 		default:

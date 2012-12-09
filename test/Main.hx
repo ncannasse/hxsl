@@ -412,6 +412,55 @@ class Main {
 			mov out, c0.xxxx
 		");
 
+		// skinning
+		test({
+			var input : {
+				pos : Float3,
+				weights : Float3,
+				index : Int,
+			}
+
+			function vertex( mpos : Matrix, mproj : Matrix, bones : M34<39> ) {
+				var p : Float4;
+				p.xyz = pos.xyzw * weights.x * bones[index.x * (255 * 3)] + pos.xyzw * weights.y * bones[index.y * (255 * 3)] + pos.xyzw * weights.z * bones[index.z * (255 * 3)];
+				p.w = 1;
+				out = (p * mpos) * mproj;
+			}
+			
+			function fragment() {
+				out = [1, 1, 1, 1];
+			}
+		},"
+			mul t0, a0.xyzw, a1.xxxx
+			mul t1.w, a2.x, c125.x
+			dp4 t2.x, t0, c8[t1.w]
+			dp4 t2.y, t0, c9[t1.w]
+			dp4 t2.z, t0, c10[t1.w]
+			mul t3, a0.xyzw, a1.yyyy
+			mul t4.w, a2.y, c125.x
+			dp4 t5.x, t3, c8[t4.w]
+			dp4 t5.y, t3, c9[t4.w]
+			dp4 t5.z, t3, c10[t4.w]
+			add t6.xyz, t2.xyz, t5.xyz
+			mul t7, a0.xyzw, a1.zzzz
+			mul t0.w, a2.z, c125.x
+			dp4 t1.x, t7, c8[t0.w]
+			dp4 t1.y, t7, c9[t0.w]
+			dp4 t1.z, t7, c10[t0.w]
+			add t2.xyz, t6.xyz, t1.xyz
+			mov t2.w, c125.y
+			dp4 t3.x, t2, c0
+			dp4 t3.y, t2, c1
+			dp4 t3.z, t2, c2
+			dp4 t3.w, t2, c3
+			dp4 out.x, t3, c4
+			dp4 out.y, t3, c5
+			dp4 out.z, t3, c6
+			dp4 out.w, t3, c7
+			
+			mov out, c0.xxxx
+		");
+
 		trace(COUNT+" shaders checked");
 	}
 	

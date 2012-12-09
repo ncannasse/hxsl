@@ -747,12 +747,8 @@ class Compiler {
 			for( t in types )
 				if( isCompatible(e1.t, t.p1) && isCompatible(e1.t, t.p2) ) {
 					var swiz = [];
-					var s = switch( e2.d ) {
-					case CVar(_, s): if( s == null ) X else s[0];
-					default: X;
-					}
 					for( i in 0...Tools.floatSize(e1.t) )
-						swiz.push(s);
+						swiz.push(X);
 					return { d : COp(op,e1,{ d : CSwiz(e2, swiz), t : e1.t, p : e2.p }), t : e1.t, p : p };
 				}
 		// ...or the other way around
@@ -760,12 +756,8 @@ class Compiler {
 			for( t in types )
 				if( isCompatible(e2.t, t.p1) && isCompatible(e2.t, t.p2) ) {
 					var swiz = [];
-					var s = switch( e1.d ) {
-					case CVar(_, s): if( s == null ) X else s[0];
-					default: X;
-					}
 					for( i in 0...Tools.floatSize(e2.t) )
-						swiz.push(s);
+						swiz.push(X);
 					return { d : COp(op,{ d : CSwiz(e1, swiz), t : e2.t, p : e1.p }, e2), t : e2.t, p : p };
 				}
 				

@@ -287,6 +287,7 @@ class AgalCompiler {
 			}
 			// set last-write per-component codepos
 			if( r.access != null ) {
+				// if we have an access, our index is good but our swiz is not
 				t.lastWritePos[Type.enumIndex(r.access.comp)] = codePos;
 				t.assignedTo[Type.enumIndex(r.access.comp)] = null;
 			} else if( r.swiz == null ) {
@@ -324,9 +325,8 @@ class AgalCompiler {
 			}
 		} else {
 			if( t == null ) throw "assert";
-			// I don't think it makes sense to use the r.access.comp as the swizzle here...
-			//var s = if( r.access != null ) [r.access.comp] else if( r.swiz == null ) [X, Y, Z, W] else r.swiz;
-			var s = if( r.swiz == null ) [X, Y, Z, W] else r.swiz;
+			// if we have an access, our index is good but our swiz is not
+			var s = if( r.access != null ) [r.access.comp] else if( r.swiz == null ) [X, Y, Z, W] else r.swiz;
 
 			// if we need to read some components at some time
 			// make sure that we reserve all the components as soon
@@ -345,7 +345,7 @@ class AgalCompiler {
 			for ( c in s ) {
 				var ci = Type.enumIndex(c);
 				var from = t.assignedTo[ci];
-				if ( from != null && (copy == null || from == copy) ) {
+				if( from != null && (copy == null || from == copy) ) {
 					copy = from;
 
 					var fromTemp = temps[from];
@@ -354,12 +354,11 @@ class AgalCompiler {
 						continue;
 					}
 				}
-
 				copy = null;
 				break;
 			}
 
-			if ( copy != null ) {
+			if( copy != null ) {
 				r.index = t.assignedTo[Type.enumIndex(s[0])];
 				r.swiz = [];
 				for( c in s )
@@ -367,8 +366,9 @@ class AgalCompiler {
 				regLive(r, write);
 				return;
 			}
-
+			
 			if( minPos < 0 ) throw "assert";
+			
 			for( p in minPos+1...codePos ) {
 				var k = t.liveBits[p];
 				if( k == null ) k = 0;

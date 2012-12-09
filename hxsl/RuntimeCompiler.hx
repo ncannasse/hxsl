@@ -433,7 +433,7 @@ class RuntimeCompiler {
 			throw "assert "+Type.enumConstructor(e.d);
 		var v = compileValue(v, true);
 		var e = compileValue(e);
-		cur.exprs.push({ v : v, e : e });
+		addAssign(v,e,cur.pos);
 	}
 	
 	function compileCond( v : CodeValue ) {
@@ -692,6 +692,27 @@ class RuntimeCompiler {
 			default:
 				return { d : CSwiz(v, swiz), t : Tools.makeFloat(swiz.length), p : e.p };
 			}
+		case CRow(v, index):
+			v = compileValue(v);
+			index = compileValue(index);
+			switch( v.d ) {
+			case CVar(v, swiz):
+				if( swiz == null )
+					switch( v.type ) {
+					case TArray(t, _):
+						v = newVar(v, e.p);
+						props(v).read = true;
+						return { d : CAccess(v, index), t : t, p : e.p };
+					default:
+					}
+			default:
+			}
+			throw "assert row " + v;
+		case CAccess(v, idx):
+			v = newVar(v, e.p);
+			props(v).read = true;
+			idx = compileValue(idx);
+			return { d : CAccess(v, idx), t : e.t, p : e.p };
 		default:
 			throw "assert "+Type.enumConstructor(e.d);
 		}

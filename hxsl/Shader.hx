@@ -77,7 +77,7 @@ class ShaderGlobals {
 		
 		function checkType(t:Data.VarType) {
 			switch( t ) {
-			case TNull, TFloat, TBool, TInt:
+			case TNull, TFloat, TBool, TInt, TTexture(_):
 			case TFloat2, TFloat3, TFloat4: hasParamVector = true;
 			case TArray(t, _): checkType(t);
 			case TMatrix(_): hasParamMatrix = true;
