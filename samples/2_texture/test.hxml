@@ -1,0 +1,8 @@
+-cp ../lib
+-swf test.swf
+-swf-version 9
+-swf-header 800:600:30:FFFFFF
+--flash-strict
+-main Test
+-swf-version 11
+-lib format
