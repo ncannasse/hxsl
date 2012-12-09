@@ -14,8 +14,9 @@ class TestShader extends hxsl.Shader {
 			uv : Float2,
 		};
 		var tuv : Float2;
+		var dpos : Float4;
 		function vertex( mproj : Matrix ) {
-			var tmp = pos.xyzw * mproj;
+			var tmp = (dpos == null ? pos.xyzw : pos.xyzw * dpos) * mproj;
 			out = tmp;
 			tuv = uv;
 		}
@@ -277,7 +278,7 @@ class Main {
 			function fragment() {
 				out = v;
 			}
-		},"Parameter 'unused' not used");
+		},"Constant 'unused' not used");
 		
 		test( {
 			function vertex() {
@@ -324,8 +325,8 @@ class Main {
 			var tuv : Float2;
 			
 			var useMatrixPos : Bool;
-			var uvScale : Const<Float2>;
-			var uvDelta : Const<Float2>;
+			var uvScale : Param<Float2>;
+			var uvDelta : Param<Float2>;
 			
 			function vertex( mpos : Matrix, mproj : Matrix ) {
 				out = if( useMatrixPos ) (pos.xyzw * mpos) * mproj else pos.xyzw * mproj;
@@ -362,8 +363,8 @@ class Main {
 			var tuv : Float2;
 			
 			var useMatrixPos : Bool;
-			var uvScale : Const<Float2>;
-			var uvDelta : Const<Float2>;
+			var uvScale : Param<Float2>;
+			var uvDelta : Param<Float2>;
 			
 			function vertex( mpos : Matrix, mproj : Matrix ) {
 				out = if( useMatrixPos ) (pos.xyzw * mpos) * mproj else pos.xyzw * mproj;
