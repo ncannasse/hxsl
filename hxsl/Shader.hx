@@ -255,6 +255,38 @@ class Shader {
 		return instance;
 	}
 	
+	public function bind( ctx : flash.display3D.Context3D, buffer : flash.display3D.VertexBuffer3D ) {
+		var i = getInstance();
+		if( i.program == null ) {
+			var vdata = i.vertexBytes.getData();
+			var fdata = i.fragmentBytes.getData();
+			vdata.endian = flash.utils.Endian.LITTLE_ENDIAN;
+			fdata.endian = flash.utils.Endian.LITTLE_ENDIAN;
+			i.program = ctx.createProgram();
+			i.program.upload(vdata,fdata);
+		}
+		ctx.setProgram(i.program);
+		ctx.setProgramConstantsFromVector(flash.display3D.Context3DProgramType.VERTEX, 0, i.vertexVars);
+		ctx.setProgramConstantsFromVector(flash.display3D.Context3DProgramType.FRAGMENT, 0, i.fragmentVars);
+		for( k in 0...i.textures.length )
+			ctx.setTextureAt(k, i.textures[k]);
+		var FORMAT = [
+			flash.display3D.Context3DVertexBufferFormat.BYTES_4,
+			flash.display3D.Context3DVertexBufferFormat.FLOAT_1,
+			flash.display3D.Context3DVertexBufferFormat.FLOAT_2,
+			flash.display3D.Context3DVertexBufferFormat.FLOAT_3,
+			flash.display3D.Context3DVertexBufferFormat.FLOAT_4,
+		];
+		var pos = 0, offset = 0;
+		var bits = i.bufferFormat;
+		while( offset < i.stride ) {
+			var size = bits & 7;
+			ctx.setVertexBufferAt(pos++, buffer, offset, FORMAT[size]);
+			offset += size == 0 ? 1 : size;
+			bits >>= 3;
+		}
+	}
+	
 	function updateParams() {
 		// copy vars from our local shader to the instance
 		updateVertexParams(instance.vertexVars, instance.vertexMap);
