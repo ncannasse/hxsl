@@ -108,7 +108,7 @@ class RuntimeCompiler {
 		var hVars = new Hash();
 		for( v in data.globals.concat(data.vertex.args).concat(data.fragment.args) )
 			switch( v.kind ) {
-			case VParam, VConst:
+			case VConst, VParam:
 				hVars.set(v.name, v);
 			case VInput:
 				props(v).global = true;
@@ -185,21 +185,21 @@ class RuntimeCompiler {
 				if( p.ref != null ) p.ref.index = v.index;
 				indexes[tkind] += size;
 				switch( v.kind ) {
-				case VParam:
+				case VConst:
 					c.args.push(v);
 					props(v).global = false; // remove from global list
 				case VTexture:
 					c.tex.push(v);
-				case VConst:
-					throw "assert"; // should have been translated to VParam
+				case VParam:
+					throw "assert"; // should have been translated to VConst
 				case VInput, VOut, VVar, VTmp:
 				}
 			}
 		}
 		// move consts at the end
-		var cdelta = indexes[Type.enumIndex(VParam)];
+		var cdelta = indexes[Type.enumIndex(VConst)];
 		for( v in extraVars )
-			if( v.kind == VParam )
+			if( v.kind == VConst )
 				v.index += cdelta;
 		
 		c.tempSize = indexes[Type.enumIndex(VTmp)];
@@ -320,7 +320,7 @@ class RuntimeCompiler {
 	}
 	
 	function makeConst(index:Int, swiz, p) {
-		var v = allocVar("$c" + index, VParam, TFloat4, p);
+		var v = allocVar("$c" + index, VConst, TFloat4, p);
 		v.index = index;
 		return { d : CVar(v, swiz), t : Tools.makeFloat(swiz.length), p : p };
 	}
@@ -473,7 +473,7 @@ class RuntimeCompiler {
 	
 	function newVar( v : Variable, p : Position ) {
 		if( isCond ) {
-			if( v.kind != VConst )
+			if( v.kind != VParam )
 				throw "assert";
 			return v;
 		}
@@ -482,7 +482,7 @@ class RuntimeCompiler {
 		var p = props(v);
 		if( p.newVar == null ) {
 			var kind = v.kind;
-			if( kind == VConst ) kind = VParam;
+			if( kind == VParam ) kind = VConst;
 			p.newVar = {
 				id : v.id,
 				kind : kind,

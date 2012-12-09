@@ -147,9 +147,9 @@ class Compiler {
 				cur.tex.push(v);
 			default:
 				v = allocVar(a.n, null, a.t, a.p);
-				// set Param but allow to refine as Const
+				// set Const but allow to refine as Param later
 				if( v.kind == null ) {
-					v.kind = VParam;
+					v.kind = VConst;
 					props(v).inferred = true;
 				}
 				cur.args.push(v);
@@ -304,7 +304,7 @@ class Compiler {
 				if( !cur.vertex ) error("You can't write a variable in fragment shader", v.p);
 				if( vp.write & bits != 0  ) error("Multiple writes to the same variable are not allowed", v.p);
 				vp.write |= bits;
-			case VParam, VConst:
+			case VConst, VParam:
 				error("Constant values cannot be written", v.p);
 			case VInput:
 				error("Input values cannot be written", v.p);
@@ -346,7 +346,7 @@ class Compiler {
 		if( k == null ) {
 			switch( t ) {
 			case TBool:
-				k = VConst;
+				k = VParam;
 			case TTexture(_):
 				k = VTexture;
 			default:
@@ -363,7 +363,7 @@ class Compiler {
 		varProps[v.id] = {
 			global : false,
 			read : false,
-			write : if( k == null ) fullBits(t) else switch( k ) { case VInput, VParam, VConst: fullBits(t); default: 0; },
+			write : if( k == null ) fullBits(t) else switch( k ) { case VInput, VConst, VParam: fullBits(t); default: 0; },
 			inferred : false,
 		};
 		#if neko
@@ -389,7 +389,7 @@ class Compiler {
 			// not used var
 			if( v.kind == null ) {
 				if( cur.vertex ) continue;
-				v.kind = VParam;
+				v.kind = VConst;
 			}
 			switch( v.kind ) {
 			case VOut:
@@ -415,10 +415,10 @@ class Compiler {
 					warn("Input '" + v.name + "' is not used", p);
 			case VTmp:
 				if( !vp.read ) warn("Unused local variable '" + v.name+"'", p);
-			case VParam:
-				if( !vp.read ) warn("Parameter '" + v.name + "' not used" + (vp.global ? "" :" by " + shader), p);
 			case VConst:
-				if( !cur.vertex && !vp.read ) warn("Unused compile time constant '" + v.name + "'", p);
+				if( !vp.read ) warn("Constant '" + v.name + "' not used" + (vp.global ? "" :" by " + shader), p);
+			case VParam:
+				if( !cur.vertex && !vp.read ) warn("Unused parameter '" + v.name + "'", p);
 			case VTexture:
 				if( !cur.vertex && !vp.read )
 					warn("Unused texture " + v.name, p);
@@ -434,13 +434,13 @@ class Compiler {
 		var vp = props(v);
 		// first read on an unknown var, infer its type
 		if( v.kind == null ) {
-			v.kind = VParam;
+			v.kind = VConst;
 			vp.inferred = true;
 		}
 		switch( v.kind ) {
 		case VOut: error("Output cannot be read", p);
 		case VVar: if( cur.vertex ) error("You cannot read varying in vertex shader", p); vp.read = true;
-		case VParam: vp.read = true;
+		case VConst: vp.read = true;
 		case VTmp:
 			if( vp.write == 0 ) error("Variable '"+v.name+"' has not been initialized", p);
 			var bits = swizBits(swiz, v.type);
@@ -452,7 +452,7 @@ class Compiler {
 		case VTexture:
 			if( !allowTextureRead )
 				error("You can't read from a texture", p);
-		case VConst:
+		case VParam:
 			vp.read = true;
 		}
 	}
@@ -765,7 +765,7 @@ class Compiler {
 					return { d : COp(op,{ d : CSwiz(e1, swiz), t : e2.t, p : e1.p }, e2), t : e2.t, p : p };
 				}
 				
-		// if we have a null check, infer a VConst
+		// if we have a null check, infer a VParam
 		if( e1.t == TNull && (op == CEq || op == CNeq) ) {
 			var tmp = e1;
 			e1 = e2;
@@ -774,8 +774,8 @@ class Compiler {
 		if( e2.t == TNull ) {
 			switch( e1.d ) {
 			case CVar(v, swiz):
-				if( swiz == null && (v.kind == VConst || v.kind == null || (v.kind == VParam && props(v).inferred)) ) {
-					v.kind = VConst;
+				if( swiz == null && (v.kind == VParam || v.kind == null || (v.kind == VConst && props(v).inferred)) ) {
+					v.kind = VParam;
 					return { d : COp(op, e1, e2), t : TBool, p : p };
 				}
 			default:

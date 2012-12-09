@@ -53,14 +53,14 @@ enum Comp {
 }
 
 enum VarKind {
-	VParam;
+	VConst;
 	VVar;
 	VInput;
 	VOut;
 	VTmp;
 	VTexture;
-	// compile time constant : a VParam that also changes the shader flow
-	VConst;
+	// compile time parameter : a VConst that also changes the shader flow
+	VParam;
 }
 
 enum VarType {

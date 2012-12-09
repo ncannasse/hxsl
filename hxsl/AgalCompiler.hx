@@ -86,12 +86,12 @@ class AgalCompiler {
 	function reg( v : Variable, ?swiz ) {
 		var swiz = if( swiz == null ) initSwiz(v.type) else convertSwiz(swiz);
 		var t = switch( v.kind ) {
-		case VParam: RConst;
+		case VConst: RConst;
 		case VOut: ROut;
 		case VTmp: RTemp;
 		case VVar: RVar;
 		case VInput: RAttr;
-		case VTexture, VConst: throw "assert";
+		case VTexture, VParam: throw "assert";
 		}
 		return { t : t, index : v.index, swiz : swiz, access : null };
 	}
