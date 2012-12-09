@@ -440,7 +440,13 @@ class Compiler {
 		switch( v.kind ) {
 		case VOut: error("Output cannot be read", p);
 		case VVar: if( cur.vertex ) error("You cannot read varying in vertex shader", p); vp.read = true;
-		case VConst: vp.read = true;
+		case VConst, VParam:
+			if( !cur.vertex ) {
+				if( vp.read && v.index == 0 )
+					error("You cannot read the same constant in both vertex and fragment shader", p);
+				v.index = 1; // mark as used in fragment shader
+			}
+			vp.read = true;
 		case VTmp:
 			if( vp.write == 0 ) error("Variable '"+v.name+"' has not been initialized", p);
 			var bits = swizBits(swiz, v.type);
@@ -452,8 +458,6 @@ class Compiler {
 		case VTexture:
 			if( !allowTextureRead )
 				error("You can't read from a texture", p);
-		case VParam:
-			vp.read = true;
 		}
 	}
 
