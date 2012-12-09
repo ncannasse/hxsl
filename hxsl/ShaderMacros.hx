@@ -165,7 +165,7 @@ class ShaderMacros {
 				// creates a virtual field to track changes
 				fields.push({
 					name : v.name,
-					kind : FProp("get", "set", t),
+					kind : FProp("get_"+v.name, "set_"+v.name, t),
 					pos : pos,
 					access : [APublic],
 				});
@@ -227,7 +227,7 @@ class ShaderMacros {
 				// virtual field only (storage is indexed)
 				fields.push({
 					name : v.name,
-					kind : FProp("get", "set", t),
+					kind : FProp("get_"+v.name, "set_"+v.name, t),
 					pos : pos,
 					access : [APublic],
 				});
@@ -299,7 +299,7 @@ class ShaderMacros {
 				
 				fields.push( {
 					name : v.name,
-					kind : FProp("get","set",t),
+					kind : FProp("get_" + v.name, "set_" + v.name, t),
 					pos : pos,
 					access : [APublic],
 				});
