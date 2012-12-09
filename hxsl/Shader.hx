@@ -254,6 +254,8 @@ class Shader {
 		}
 		return instance;
 	}
+
+	#if !h3d
 	
 	public function bind( ctx : flash.display3D.Context3D, buffer : flash.display3D.VertexBuffer3D ) {
 		var i = getInstance();
@@ -302,6 +304,8 @@ class Shader {
 			bits >>= 3;
 		}
 	}
+	
+	#end
 	
 	function updateParams() {
 		// copy vars from our local shader to the instance
