@@ -93,13 +93,13 @@ class RuntimeCompiler {
 	}
 	
 	/**
-		Compile the final shader : the consts is a mapping of all the variables that will be applied at compilation time.
+		Compile the final shader : the params is a mapping of all the variables that will be applied at compilation time.
 		The can be of the following value :
 			* null
 			* true/false for Bool
-			* an Int base index in the constData table for all other types
+			* an Int base index in the paramsData table for all other types
 	**/
-	public function compile( data : Data, ?consts : { }, ?constData : #if flash flash.Vector #else Array #end<Float> ) : Data {
+	public function compile( data : Data, ?params : { }, ?paramsData : #if flash flash.Vector #else Array #end<Float> ) : Data {
 		usedVars = [];
 		varProps = [];
 		extraVars = [];
@@ -114,28 +114,28 @@ class RuntimeCompiler {
 				props(v).global = true;
 			default:
 			}
-		if( consts != null )
-			for( f in Reflect.fields(consts) ) {
+		if( params != null )
+			for( f in Reflect.fields(params) ) {
 				var v = hVars.get(f);
 				if( v == null )
-					error("Unknown const " + f, null);
-				var val : Dynamic = Reflect.field(consts, f);
+					error("Unknown params " + f, null);
+				var val : Dynamic = Reflect.field(params, f);
 				if( val == null )
 					continue;
 				switch( v.type ) {
 				case TNull, TTexture(_): throw "assert";
 				case TBool:
 					if( !Std.is(val, Bool) )
-						error("Invalid value for const " + v.name, null);
+						error("Invalid value for parameter " + v.name, null);
 					props(v).value = CBool(val);
 				case TInt, TFloat, TFloat2, TFloat3, TFloat4, TMatrix(_), TArray(_):
 					if( !Std.is(val, Int) )
-						error("Invalid value for const " + v.name, null);
+						error("Invalid value for parameter " + v.name, null);
 					var index : Int = val;
 					var size = Tools.floatSize(v.type);
 					var a = [];
 					for( i in 0...size ) {
-						var v = constData == null ? 0 : constData[i + index];
+						var v = paramsData == null ? 0 : paramsData[i + index];
 						#if !flash if( v == null ) v = 0; #end
 						a.push(v);
 					}
