@@ -23,7 +23,7 @@
  */
 package hxsl;
 
-import hxsl.Data.Tools;
+import hxsl.Data;
 
 /**
 	A ShaderInstance is a compiled version of a shader for a given set of parameters.
