@@ -135,7 +135,6 @@ class Compiler {
 			consts : [],
 			args : [],
 			exprs : [],
-			tex : [],
 			tempSize : 0,
 		};
 		for( a in c.args ) {
@@ -144,7 +143,7 @@ class Compiler {
 			case TTexture(_):
 				if( cur.vertex ) error("You can't use a texture inside a vertex shader", a.p);
 				v = allocVar(a.n, VTexture, a.t, a.p);
-				cur.tex.push(v);
+				cur.args.push(v);
 			default:
 				v = allocVar(a.n, null, a.t, a.p);
 				// set Const but allow to refine as Param later

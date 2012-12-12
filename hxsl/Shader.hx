@@ -35,6 +35,7 @@ class ShaderInstance {
 	public var program : flash.display3D.Program3D;
 
 	public var bufferFormat : Int;
+	public var bufferNames : Array<String>;
 	public var stride : Int;
 
 	public var vertexVars : flash.Vector<Float>;
@@ -166,15 +167,15 @@ class ShaderGlobals {
 		i.fragmentVars = f.consts;
 				
 		i.textureMap = new flash.Vector();
-		for( v in data2.vertex.tex.concat(data2.fragment.tex) ) {
-			if( v.kind != VTexture ) throw "assert";
-			var realV = hparams.get(v.id);
-			i.textureMap.push(realV.index);
-		}
+		for( v in data2.vertex.args.concat(data2.fragment.args) )
+			if( v.kind == VTexture ) {
+				var realV = hparams.get(v.id);
+				i.textureMap.push(realV.index);
+			}
 		i.textures = new flash.Vector(i.textureMap.length);
 		
-		
 		i.bufferFormat = 0;
+		i.bufferNames = [];
 		i.stride = 0;
 		for( v in data2.globals )
 			switch( v.kind ) {
@@ -188,13 +189,13 @@ class ShaderGlobals {
 				default:
 					throw "Type not supported in input " + Type.enumConstructor(v.type).substr(1);
 				}
+				i.bufferNames.push(v.name);
 				i.stride += size;
 			case VVar:
 				// ignore
 			default:
 				throw "assert " + v.kind;
 			}
-
 
 		instances.set(bits, i);
 		
