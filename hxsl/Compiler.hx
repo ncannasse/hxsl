@@ -442,7 +442,7 @@ class Compiler {
 		case VVar: if( cur.vertex ) error("You cannot read varying in vertex shader", p); vp.read = true;
 		case VConst, VParam:
 			if( !cur.vertex ) {
-				if( vp.read && v.index == 0 )
+				if( vp.read && v.index == 0 && v.type != TBool )
 					error("You cannot read the same constant in both vertex and fragment shader", p);
 				v.index = 1; // mark as used in fragment shader
 			}
