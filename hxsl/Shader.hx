@@ -133,11 +133,8 @@ class ShaderGlobals {
 		new format.agal.Writer(o).write(agal);
 		return { bytes : o.getBytes(), consts : consts, map : map };
 	}
-	
-	public function getInstance( bits : Int ) {
-		var i = instances.get(bits);
-		if( i != null )
-			return i;
+
+	public function compileShader( bits ) {
 		var r = new hxsl.RuntimeCompiler();
 		var params = { };
 		var paramCount = 0;
@@ -150,8 +147,15 @@ class ShaderGlobals {
 				}
 				paramCount++;
 			}
+		return r.compile(data, params);
+	}
+	
+	public function getInstance( bits : Int ) {
+		var i = instances.get(bits);
+		if( i != null )
+			return i;
+		var data2 = compileShader(bits);
 		
-		var data2 = r.compile(data, params);
 		i = new ShaderInstance();
 		i.bits = bits;
 		
@@ -255,6 +259,23 @@ class Shader {
 		return instance;
 	}
 
+	#if debug
+	public function getDebugShaderCode( bytecode = false ) {
+		var data = globals.compileShader(paramBits);
+		if( !bytecode )
+			return hxsl.Debug.dataStr(data);
+		function getCode(c) {
+			var agal = new hxsl.AgalCompiler().compile(c);
+			var lines = [];
+			for( c in agal.code )
+				lines.push("\t"+format.agal.Tools.opStr(c));
+			return lines.join("\n");
+		}
+		return "vertex:\n" + getCode(data.vertex) + "\nfragment:\n" + getCode(data.fragment);
+	}
+	#end
+	
+	
 	#if !h3d
 	
 	public function bind( ctx : flash.display3D.Context3D, buffer : flash.display3D.VertexBuffer3D ) {
