@@ -135,7 +135,6 @@ class Compiler {
 			consts : [],
 			args : [],
 			exprs : [],
-			tex : [],
 			tempSize : 0,
 		};
 		for( a in c.args ) {
@@ -144,7 +143,7 @@ class Compiler {
 			case TTexture(_):
 				if( cur.vertex ) error("You can't use a texture inside a vertex shader", a.p);
 				v = allocVar(a.n, VTexture, a.t, a.p);
-				cur.tex.push(v);
+				cur.args.push(v);
 			default:
 				v = allocVar(a.n, null, a.t, a.p);
 				// set Const but allow to refine as Param later
@@ -442,7 +441,7 @@ class Compiler {
 		case VVar: if( cur.vertex ) error("You cannot read varying in vertex shader", p); vp.read = true;
 		case VConst, VParam:
 			if( !cur.vertex ) {
-				if( vp.read && v.index == 0 )
+				if( vp.read && v.index == 0 && v.type != TBool )
 					error("You cannot read the same constant in both vertex and fragment shader", p);
 				v.index = 1; // mark as used in fragment shader
 			}

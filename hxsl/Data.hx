@@ -173,7 +173,6 @@ typedef Code = {
 	var pos : Position;
 	var args : Array<Variable>;
 	var consts : Array<Array<Float>>;
-	var tex : Array<Variable>;
 	var exprs : CodeBlock;
 	var tempSize : Int;
 }
@@ -321,12 +320,7 @@ class Tools {
 	}
 	
 	public static function getAllVars( hx : Data ) {
-		var all = hx.globals.concat(hx.vertex.args).concat(hx.fragment.args);
-		for( v in hx.vertex.tex )
-			all.push(v);
-		for( v in hx.fragment.tex )
-			all.push(v);
-		return all;
+		return hx.globals.concat(hx.vertex.args).concat(hx.fragment.args);
 	}
 
 }

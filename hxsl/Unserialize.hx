@@ -56,17 +56,12 @@ class Unserialize {
 		var args = [];
 		for( i in 0...s.unserialize() )
 			args.push( unserializeVar() );
-		var tex = [];
-		if( !vertex ) {
-			for( i in 0...s.unserialize() )
-				tex.push( unserializeVar() );
-		}
 		var exprs = [];
 		for( i in 0...s.unserialize() )
 			exprs.push( { v:unserializeCodeValue(), e:unserializeCodeValue() } );
 		var consts:Array<Array<Float>> = s.unserialize();
 		var pos = unserializePos();
-		return { pos:pos, args:args, tex:tex, exprs:exprs, consts:consts, vertex:vertex, tempSize:0 };
+		return { pos:pos, args:args, exprs:exprs, consts:consts, vertex:vertex, tempSize:0 };
 	}
 
 	function unserializeVar() : Variable {

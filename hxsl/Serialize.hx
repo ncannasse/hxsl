@@ -64,11 +64,6 @@ class Serialize {
 		s.serialize(code.args.length);
 		for( arg in code.args )
 			serializeVar(arg);
-		if( !code.vertex ) {
-			s.serialize(code.tex.length);
-			for ( tex in code.tex )
-				serializeVar(tex);
-		}
 
 		s.serialize(code.exprs.length);
 		for ( expr in code.exprs ) {

@@ -185,11 +185,9 @@ class RuntimeCompiler {
 				if( p.ref != null ) p.ref.index = v.index;
 				indexes[tkind] += size;
 				switch( v.kind ) {
-				case VConst:
+				case VConst, VTexture:
 					c.args.push(v);
 					props(v).global = false; // remove from global list
-				case VTexture:
-					c.tex.push(v);
 				case VParam:
 					throw "assert"; // should have been translated to VConst
 				case VInput, VOut, VVar, VTmp:
@@ -215,7 +213,6 @@ class RuntimeCompiler {
 		cur = {
 			vertex : c.vertex,
 			args : [],
-			tex : [],
 			consts : [],
 			exprs : [],
 			pos : c.pos,
