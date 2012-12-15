@@ -710,6 +710,14 @@ class RuntimeCompiler {
 			props(v).read = true;
 			idx = compileValue(idx);
 			return { d : CAccess(v, idx), t : e.t, p : e.p };
+		case CSubBlock(tmp, v):
+			var exprs = cur.exprs;
+			cur.exprs = [];
+			for( e in tmp )
+				compileAssign(e.v, e.e);
+			var tmp = cur.exprs;
+			cur.exprs = exprs;
+			return { d : CSubBlock(tmp, compileValue(v)), t : e.t, p : e.p };
 		default:
 			throw "assert "+Type.enumConstructor(e.d);
 		}
