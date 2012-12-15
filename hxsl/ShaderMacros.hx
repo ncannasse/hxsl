@@ -38,7 +38,7 @@ class ShaderMacros {
 		case TFloat2, TFloat3, TFloat4: { pack : ["hxsl"], name : "ShaderTypes", params : [], sub : "Vector" };
 		case TInt: { pack : [], name : "Int", params : [], sub : null };
 		case TMatrix(_): { pack : ["hxsl"], name: "ShaderTypes", params : [], sub : "Matrix" };
-		case TTexture(cube): { pack : ["hxsl"], name : "ShaderTypes", params : [], sub : "Texture" };
+		case TTexture(_): { pack : ["hxsl"], name : "ShaderTypes", params : [], sub : "Texture" };
 		case TArray(t, size): { pack : ["hxsl"], name : "ShaderTypes", sub : "FixedArray", params : [TPType(realType(t,p)), TPExpr( { expr : EConst(CInt(""+size)), pos : p } )] };
 		});
 	}

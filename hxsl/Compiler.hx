@@ -709,7 +709,7 @@ class Compiler {
 		if( !tryUnify(t1, t2) ) {
 			// if we only have the transpose flag different, let's print a nice error message
 			switch(t1) {
-			case TMatrix(r, c, t):
+			case TMatrix(r, c, _):
 				switch( t2 ) {
 				case TMatrix(r2, c2, t):
 					if( r == r2 && c == c2 && t.t != null ) {
