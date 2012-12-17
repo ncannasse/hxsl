@@ -129,7 +129,7 @@ class Unserialize {
 		case 7:
 			CConst(switch( s.unserialize() ) {
 			case 0: CNull;
-			case 1: CInt(s.unserialize());
+			case 1: Const.CInt(s.unserialize());
 			case 2: CBool(s.unserialize());
 			case 3: CFloat(s.unserialize());
 			case 4: CFloats(s.unserialize());
@@ -204,15 +204,15 @@ class Unserialize {
 		var typeIndex:Null<Int> = s.unserialize();
 		if ( typeIndex == null ) return null;
 		switch ( typeIndex ) {
-		case Type.enumIndex(TMatrix(0,0,null)):
+		case 7:
 			var r:Int = s.unserialize();
 			var c:Int = s.unserialize();
 			var transpose = s.unserialize();
 			return TMatrix(r,c,{t:transpose});
-		case Type.enumIndex(TTexture(true)):
+		case 8:
 			var cube = s.unserialize();
 			return TTexture(cube);
-		case Type.enumIndex(TArray(null,0)):
+		case 9:
 			var type = unserializeVarType();
 			var size = s.unserialize();
 			return TArray(type, size);

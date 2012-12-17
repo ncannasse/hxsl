@@ -415,7 +415,7 @@ class RuntimeCompiler {
 					compileAssign(e.v, e.e);
 			}
 			return;
-		case CFor(it, start, end, exprs):
+		case CFor(_):
 			throw "TODO";
 		case CUnop(op, _):
 			switch( op ) {
@@ -610,7 +610,7 @@ class RuntimeCompiler {
 	
 	function compileValue( e : CodeValue, isTarget = false ) : CodeValue {
 		var d = switch( e.d ) {
-		case CConst(c):
+		case CConst(_):
 			e.d;
 		case CVar(v, swiz):
 			var v = newVar(v, e.p);
@@ -710,6 +710,14 @@ class RuntimeCompiler {
 			props(v).read = true;
 			idx = compileValue(idx);
 			return { d : CAccess(v, idx), t : e.t, p : e.p };
+		case CSubBlock(tmp, v):
+			var exprs = cur.exprs;
+			cur.exprs = [];
+			for( e in tmp )
+				compileAssign(e.v, e.e);
+			var tmp = cur.exprs;
+			cur.exprs = exprs;
+			return { d : CSubBlock(tmp, compileValue(v)), t : e.t, p : e.p };
 		default:
 			throw "assert "+Type.enumConstructor(e.d);
 		}
