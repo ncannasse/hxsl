@@ -269,7 +269,7 @@ class ShaderMacros {
 
 					fields.push( {
 						name : "get_" + v.name,
-						kind : FFun({ ret : t, params : [], args : [], expr : macro { modified = true; return $evar; } }),
+						kind : FFun({ ret : t, params : [], args : [], expr : macro { var tmp = $evar; if( tmp != null ) modified = true; return tmp; } }),
 						pos : pos,
 						access : [AInline],
 					});
