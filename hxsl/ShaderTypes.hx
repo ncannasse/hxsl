@@ -33,5 +33,5 @@ typedef Vector = flash.geom.Vector3D;
 typedef Matrix = flash.geom.Matrix3D;
 #end
 
-typedef FixedArray<T,Const> = flash.Vector<T>;
+typedef FixedArray<T,Const> = Array<T>;
 

@@ -188,7 +188,8 @@ class ShaderGlobals {
 				var size = Tools.floatSize(v.type);
 				switch( v.type ) {
 				case TInt:
-					// 0
+					// bufferFormat 0
+					size = 1; // takes space of one float in buffer
 				case TFloat, TFloat2, TFloat3, TFloat4:
 					i.bufferFormat |= Tools.floatSize(v.type) << (3 * v.index);
 				default:
@@ -248,7 +249,7 @@ class Shader {
 	}
 
 	inline function makeArray(size) {
-		return new ShaderTypes.FixedArray(size);
+		return new ShaderTypes.FixedArray();
 	}
 
 	public function getInstance() : ShaderInstance {
