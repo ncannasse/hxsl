@@ -32,6 +32,7 @@ private typedef VarProps = {
 	var global : Bool;
 	var write : Int;
 	var inferred : Bool;
+	var readInShader : Null<Bool>;
 }
 
 class Compiler {
@@ -200,7 +201,7 @@ class Compiler {
 				ret.v = compileValue(v);
 				return;
 			case PIf(cond, eif, eelse):
-				var cond = compileValue(cond);
+				var cond = compileValue(cond, false, true);
 				unify(cond.t, TBool, e.p);
 				// save writes
 				var oldWrite = [];
@@ -364,6 +365,7 @@ class Compiler {
 			read : false,
 			write : if( k == null ) fullBits(t) else switch( k ) { case VInput, VConst, VParam: fullBits(t); default: 0; },
 			inferred : false,
+			readInShader : null,
 		};
 		#if neko
 		untyped v.__string = function() return neko.NativeString.ofString(__this__.name + "#" + __this__.id+" : "+Tools.typeStr(__this__.type));
@@ -429,7 +431,7 @@ class Compiler {
 		return s != null && s.length > 1 && (s[0] != X || s[1] != Y || (s.length > 2 && (s[2] != Z || (s.length > 3 && s[3] != W))));
 	}
 
-	function checkReadVar( v : Variable, swiz, p : Position ) {
+	function checkReadVar( v : Variable, swiz, p : Position, isCond : Bool ) {
 		var vp = props(v);
 		// first read on an unknown var, infer its type
 		if( v.kind == null ) {
@@ -440,10 +442,12 @@ class Compiler {
 		case VOut: error("Output cannot be read", p);
 		case VVar: if( cur.vertex ) error("You cannot read varying in vertex shader", p); vp.read = true;
 		case VConst, VParam:
-			if( !cur.vertex ) {
-				if( vp.read && v.index == 0 && v.type != TBool )
+			if( !isCond ) {
+				if( vp.readInShader != null && vp.readInShader != cur.vertex )
 					error("You cannot read the same constant in both vertex and fragment shader", p);
-				v.index = 1; // mark as used in fragment shader
+				vp.readInShader = cur.vertex;
+				if( !cur.vertex )
+					v.index = 1; // mark as used in fragment shader
 			}
 			vp.read = true;
 		case VTmp:
@@ -475,7 +479,7 @@ class Compiler {
 		return null;
 	}
 	
-	function compileValue( e : ParsedValue, ?isTarget : Bool ) : CodeValue {
+	function compileValue( e : ParsedValue, ?isTarget : Bool, ?isCond ) : CodeValue {
 		switch( e.v ) {
 		case PBlock(_), PReturn(_):
 			throw "assert";
@@ -484,7 +488,7 @@ class Compiler {
 			if( v == null )
 				error("Unknown variable '" + vname + "'", e.p);
 			if( !isTarget )
-				checkReadVar(v,null,e.p);
+				checkReadVar(v,null,e.p, isCond);
 			return { d : CVar(v, null), t : v.type, p : e.p };
 		case PConst(c):
 			var t = switch( c ) {
@@ -532,7 +536,7 @@ class Compiler {
 				var ns;
 				if( swiz2 == null ) {
 					if( !isTarget )
-						checkReadVar(v, swiz, e.p);
+						checkReadVar(v, swiz, e.p, isCond);
 					ns = swiz;
 				} else {
 					// combine swizzlings
@@ -545,9 +549,9 @@ class Compiler {
 				return { d : CSwiz(v, swiz), t : Tools.makeFloat(swiz.length), p : e.p };
 			}
 		case POp(op, e1, e2):
-			return makeOp(op, e1, e2, e.p);
+			return makeOp(op, e1, e2, e.p, isCond);
 		case PUnop(op, e1):
-			return makeUnop(op, e1, e.p);
+			return makeUnop(op, e1, e.p, isCond);
 		case PTex(vname, acc, flags):
 			var v = vars.get(vname);
 			if( v == null ) error("Unknown texture '" + vname + "'", e.p);
@@ -570,7 +574,7 @@ class Compiler {
 					}
 					tflags.push( { f : CTFlag(fl), p : f.p } );
 				case PTParam(p, v):
-					var v = compileValue(v);
+					var v = compileValue(v, false, true);
 					param = p;
 					var t = switch( p ) {
 					case PLodBias: TFloat;
@@ -727,9 +731,9 @@ class Compiler {
 		}
 	}
 
-	function makeOp( op : CodeOp, e1 : ParsedValue, e2 : ParsedValue, p : Position ) {
-		var e1 = compileValue(e1);
-		var e2 = compileValue(e2);
+	function makeOp( op : CodeOp, e1 : ParsedValue, e2 : ParsedValue, p : Position, isCond : Bool ) {
+		var e1 = compileValue(e1, false, isCond);
+		var e2 = compileValue(e2, false, isCond);
 
 		// look for a valid operation as listed in "ops"
 		var types = ops[Type.enumIndex(op)];
@@ -794,8 +798,8 @@ class Compiler {
 		return null;
 	}
 
-	function makeUnop( op : CodeUnop, e : ParsedValue, p : Position ) {
-		var e = compileValue(e);
+	function makeUnop( op : CodeUnop, e : ParsedValue, p : Position, isCond ) {
+		var e = compileValue(e,false,isCond);
 		var rt = e.t;
 		switch( op ) {
 		case CNot:
