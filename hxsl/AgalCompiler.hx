@@ -551,11 +551,21 @@ class AgalCompiler {
 		}
 	}
 
-	// we have to make sure that we don't have MXX macros when one of the sources is a temp var
+	// we have to make sure that we don't output MXX macros when one of the sources is a temp var
 	// or else that might break our temp optimization algorithm because each column might be
 	// assigned to a different temporary, and since we can't read+write on the same source without
 	// causing issues
 	function matrixOp( op : Reg -> Reg -> Reg -> Opcode, num : Int, dst : Reg, a : Reg, b : Reg ) {
+		if( dst.index == a.index && dst.t == a.t ) {
+			var t = allocTemp(num == 3 ? TFloat3 : TFloat4);
+			code.push(OMov(t, a));
+			a = t;
+		}
+		if( dst.index == b.index && dst.t == b.t ) {
+			var t = allocTemp(num == 3 ? TFloat3 : TFloat4);
+			code.push(OMov(t, b));
+			b = t;
+		}
 		for( i in 0...num )
 			code.push(op(delta(dst, 0, [[X, Y, Z, W][i]]), a, delta(b, i)));
 		return code.pop();
