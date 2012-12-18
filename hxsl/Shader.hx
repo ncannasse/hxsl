@@ -114,6 +114,7 @@ class ShaderGlobals {
 		for( v in code.args ) {
 			var realV = hparams.get(v.id);
 			if( v == null ) throw "assert " + v.name;
+			if( v.kind == VTexture ) continue;
 			map[realV.index] = v.index * 4;
 			nregs += Tools.regSize(v.type);
 		}
