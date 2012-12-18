@@ -51,7 +51,7 @@ class ShaderMacros {
 	}
 
 	static function saveType( t : VarType, eindex, evar, pos, rec = 0 ) {
-		var args = [{ expr : EConst(CIdent("_params")), pos : pos }, { expr : EArray({ expr : EConst(CIdent("_map")), pos : pos },{ expr : eindex, pos : pos }), pos : pos }, evar];
+		var args = [{ expr : EConst(CIdent("_params")), pos : pos }, { expr : eindex, pos : pos }, evar];
 		var name = switch( t ) {
 		case TBool, TNull, TTexture(_): throw "assert";
 		case TInt: "Int";
@@ -71,7 +71,7 @@ class ShaderMacros {
 			var stride = Tools.regSize(t);
 			var save = saveType(
 				t,
-				EBinop(OpAdd, { expr : eindex, pos : pos }, { expr : EBinop(OpMult, { expr : EConst(CIdent(vi)), pos : pos }, { expr : EConst(CInt(stride + "")), pos : pos } ), pos : pos } ),
+				EBinop(OpAdd, { expr : eindex, pos : pos }, { expr : EBinop(OpMult, { expr : EConst(CIdent(vi)), pos : pos }, { expr : EConst(CInt((stride * 4) + "")), pos : pos } ), pos : pos } ),
 				ek,
 				pos,
 				rec + 1
@@ -213,7 +213,8 @@ class ShaderMacros {
 					access : [],
 				});
 
-				var save = saveType(v.type, EConst(CInt(""+constIndex)), evar, pos);
+				var mapIndex = EArray( { expr : EConst(CIdent("_map")), pos : pos }, { expr : EConst(CInt("" + constIndex)), pos:pos } );
+				var save = saveType(v.type, mapIndex, evar, pos);
 				updates.push({ v : v, save : save });
 				
 			case VParam:
@@ -290,7 +291,8 @@ class ShaderMacros {
 						access : [AInline],
 					});
 
-					var save = saveType(v.type, EConst(CInt(constIndex + "")), evar, pos);
+					var mapIndex = EArray( { expr : EConst(CIdent("_map")), pos : pos }, { expr : EConst(CInt("" + constIndex)), pos:pos } );
+					var save = saveType(v.type, mapIndex, evar, pos);
 					updates.push( { v : v, save : save } );
 				}
 				
