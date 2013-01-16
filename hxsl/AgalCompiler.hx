@@ -631,9 +631,9 @@ class AgalCompiler {
 					case TFloat3: if( v1.t == RTemp || v2.t == RTemp ) matrixOp.bind(e.t == TFloat4 ? ODp4 : ODp3,3) else if( e.t == TFloat4 ) OM34 else OM33;
 					case TMatrix(w, h, _):
 						if( w == 4 && h == 4 )
-							callback(matrix44multiply, e.t);
+							matrix44multiply.bind(e.t);
 						else if( w == 3 && h == 3 )
-							callback(matrix33multiply, e.t);
+							matrix33multiply.bind(e.t);
 						else
 							throw "assert";
 					default:
