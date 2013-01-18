@@ -62,7 +62,7 @@ class Main {
 	}
 	#end
 	
-	@:macro static function test( shader : Expr, out : String, ?params : { } ) {
+	static macro function test( shader : Expr, out : String, ?params : { } ) {
 		var s = null;
 		var consts = [];
 		try {
@@ -97,7 +97,7 @@ class Main {
 		return s.chk;
 	}
 	
-	@:macro static function error( shader : Expr, msg : String, ?params : { } ) {
+	static macro function error( shader : Expr, msg : String, ?params : { } ) {
 		try {
 			compileShader(shader, params);
 			Context.error("Shader compilation should give an error", shader.pos);
@@ -107,7 +107,7 @@ class Main {
 		return { expr : EBlock([]), pos : shader.pos };
 	}
 	
-	@:macro static function warning( shader : Expr, msg : String, ?params : { } ) {
+	static macro function warning( shader : Expr, msg : String, ?params : { } ) {
 		try {
 			var r = compileShader(shader, params);
 			if( r.warn.length == 0 )
@@ -460,6 +460,52 @@ class Main {
 			
 			mov out, c0.xxxx
 		");
+		
+		// test single float parameter
+		test({
+			var input : {
+				pos : Float3,
+				alpha : Float,
+			}
+			var alphaMult : Float;
+			var talpha : Float;
+			function vertex() {
+				out = pos.xyzw;
+				if( alphaMult != null ) talpha = alpha * alphaMult;
+			}
+			function fragment() {
+				out = [1, 0, 0, alphaMult == null ? 1 : talpha];
+			}
+		},"
+			mov out, a0.xyzw
+			
+			mov out, c0.xyyx
+		");
+
+		test({
+			var input : {
+				pos : Float3,
+				alpha : Float,
+			}
+			var alphaMult : Float;
+			var talpha : Float;
+			function vertex() {
+				out = pos.xyzw;
+				if( alphaMult != null ) talpha = alpha * alphaMult;
+			}
+			function fragment() {
+				out = [1, 0, 0, alphaMult == null ? 1 : talpha];
+			}
+		},"
+			mov out, a0.xyzw
+			mul v0.x, a1.x, c0.x
+			mov v0.yzw, c1.xxx
+			
+			mov t0.w, v0.x
+			mov t0.xyz, c0.xyy
+			mov out, t0
+		", { alphaMult : 0.5 });
+		
 
 		trace(COUNT+" shaders checked");
 	}
