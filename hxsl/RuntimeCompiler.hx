@@ -128,7 +128,11 @@ class RuntimeCompiler {
 					if( !Std.is(val, Bool) )
 						error("Invalid value for parameter " + v.name, null);
 					props(v).value = CBool(val);
-				case TInt, TFloat, TFloat2, TFloat3, TFloat4, TMatrix(_), TArray(_):
+				case TFloat:
+					if( !Std.is(val, Float) )
+						error("Invalid value for parameter " + v.name, null);
+					props(v).value = CFloat(val);
+				case TInt, TFloat2, TFloat3, TFloat4, TMatrix(_), TArray(_):
 					if( !Std.is(val, Int) )
 						error("Invalid value for parameter " + v.name, null);
 					var index : Int = val;

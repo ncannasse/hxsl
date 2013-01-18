@@ -165,7 +165,7 @@ class ShaderMacros {
 				// creates a virtual field to track changes
 				fields.push({
 					name : v.name,
-					kind : FProp("get_"+v.name, "set_"+v.name, t),
+					kind : FProp("get", "set", t),
 					pos : pos,
 					access : [APublic],
 				});
@@ -224,16 +224,18 @@ class ShaderMacros {
 				var paramIndex = paramCount++;
 				var constIndex = constCount++;
 				var index = { expr : EConst(CInt("" + paramIndex)), pos : pos };
-				
+			
 				// virtual field only (storage is indexed)
-				fields.push({
+				var field : Field = {
 					name : v.name,
-					kind : FProp("get_"+v.name, "set_"+v.name, t),
+					kind : FProp("get", "set", t),
 					pos : pos,
 					access : [APublic],
-				});
+				};
+				fields.push(field);
 				
-				if( v.type == TBool ) {
+				switch( v.type ) {
+				case TBool:
 					// simply get set on the param bit
 					fields.push( {
 						name : "get_" + v.name,
@@ -257,11 +259,26 @@ class ShaderMacros {
 						pos : pos,
 						access : [AInline],
 					});
-				} else {
+				case TFloat:
+					var tnull = TPath( { name : "Null", pack : [], params : [TPType(t)] } );
+					field.meta = [];
+					field.kind = FProp("default", "set", tnull);
+					fields.push( {
+						name : "set_" + v.name,
+						kind : FFun( {
+							args : [ { name : "v", type : tnull, opt : false } ],
+							ret : t,
+							params : [],
+							expr : macro { setParamBit($index, v != null); $i{v.name} = v; return v; },
+						}),
+						pos : pos,
+						access : [AInline],
+					});
+				default:
 					var evar = null;
 					switch( v.type ) {
-					case TBool, TNull, TTexture(_): throw "assert";
-					case TArray(_), TFloat, TInt: Context.error("This type is not yet supported as shader parameter", v.pos);
+					case TBool, TFloat, TNull, TTexture(_): throw "assert";
+					case TArray(_), TInt: Context.error("This type is not yet supported as shader parameter", v.pos);
 					case TFloat2, TFloat3, TFloat4:
 						evar = { expr : EArray( { expr : EConst(CIdent("paramVectors")), pos : pos }, { expr : EConst(CInt("" + paramVectorCount++)), pos : pos } ), pos : pos };
 					case TMatrix(_):
@@ -301,7 +318,7 @@ class ShaderMacros {
 				
 				fields.push( {
 					name : v.name,
-					kind : FProp("get_" + v.name, "set_" + v.name, t),
+					kind : FProp("get", "set", t),
 					pos : pos,
 					access : [APublic],
 				});
