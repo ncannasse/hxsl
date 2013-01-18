@@ -732,8 +732,8 @@ class Compiler {
 	}
 
 	function makeOp( op : CodeOp, e1 : ParsedValue, e2 : ParsedValue, p : Position, isCond : Bool ) {
-		var e1 = compileValue(e1, false, isCond);
-		var e2 = compileValue(e2, false, isCond);
+		var e1 = compileValue(e1, false, isCond || ((op == CEq || op == CNeq) && Type.enumEq(e2.v,PConst(CNull))) );
+		var e2 = compileValue(e2, false, isCond || ((op == CEq || op == CNeq) && e1.t == TNull) );
 
 		// look for a valid operation as listed in "ops"
 		var types = ops[Type.enumIndex(op)];
