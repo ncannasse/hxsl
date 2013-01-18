@@ -261,6 +261,7 @@ class ShaderMacros {
 					});
 				case TFloat:
 					var tnull = TPath( { name : "Null", pack : [], params : [TPType(t)] } );
+					var evar = macro $i{v.name};
 					field.meta = [];
 					field.kind = FProp("default", "set", tnull);
 					fields.push( {
@@ -269,11 +270,16 @@ class ShaderMacros {
 							args : [ { name : "v", type : tnull, opt : false } ],
 							ret : t,
 							params : [],
-							expr : macro { setParamBit($index, v != null); $i{v.name} = v; return v; },
+							expr : macro { setParamBit($index, v != null); $evar = v; return v; },
 						}),
 						pos : pos,
 						access : [AInline],
 					});
+
+					var mapIndex = EArray( { expr : EConst(CIdent("_map")), pos : pos }, { expr : EConst(CInt("" + constIndex)), pos:pos } );
+					var save = saveType(v.type, mapIndex, evar, pos);
+					updates.push( { v : v, save : save } );
+					
 				default:
 					var evar = null;
 					switch( v.type ) {
