@@ -318,7 +318,7 @@ class Shader {
 		if( i == null )
 			return;
 		for( k in 0...i.textures.length )
-			ctx.setTextureAt(k, i.textures[k]);
+			ctx.setTextureAt(k, null);
 		var pos = 0, offset = 0;
 		var bits = i.bufferFormat;
 		while( offset < i.stride ) {
