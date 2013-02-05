@@ -38,12 +38,12 @@ private typedef VarProps = {
 class Compiler {
 
 	var cur : Code;
-	var vars : Hash<Variable>;
-	var namedVars : Hash<Variable>;
+	var vars : Map<String,Variable>;
+	var namedVars : Map<String,Variable>;
 	var allVars : Array<Variable>;
 	var varProps : Array<VarProps>;
 	var ops : Array<Array<{ p1 : VarType, p2 : VarType, r : VarType }>>;
-	var helpers : Hash<Data.ParsedCode>;
+	var helpers : Map<String,Data.ParsedCode>;
 	var ret : { v : CodeValue };
 	var allowTextureRead : Bool;
 
@@ -76,7 +76,8 @@ class Compiler {
 				case CMin, CMax, CLt, CGte, CEq, CNeq, CLte, CGt: floats;
 				case CDot: [ { p1 : TFloat4, p2 : TFloat4, r : TFloat }, { p1 : TFloat3, p2 : TFloat3, r : TFloat } ];
 				case CCross: [ { p1 : TFloat3, p2 : TFloat3, r : TFloat3 }];
-				case CAnd, COr: [{ p1 : TBool, p2 : TBool, r : TBool }];
+				case CAnd, COr: [ { p1 : TBool, p2 : TBool, r : TBool } ];
+				case CInterval: [];
 				case CMul: floats.concat([
 					{ p1 : TFloat4, p2 : mat4_t, r : TFloat4 },
 					{ p1 : TFloat4, p2 : mat34_t, r : TFloat3 },
@@ -104,8 +105,8 @@ class Compiler {
 	}
 
 	public function compile( h : ParsedHxsl ) : Data {
-		vars = new Hash();
-		namedVars = new Hash();
+		vars = new Map();
+		namedVars = new Map();
 		varProps = [];
 		allVars = [];
 
@@ -173,13 +174,13 @@ class Compiler {
 	}
 
 	function saveVars() {
-		var old = new Hash();
+		var old = new Map();
 		for( v in vars.keys() )
 			old.set(v, vars.get(v));
 		return old;
 	}
 
-	function closeBlock( old : Hash<Variable> ) {
+	function closeBlock( old : Map<String,Variable> ) {
 		for( v in vars )
 			if( v.kind == VTmp && old.get(v.name) != v && !props(v).read )
 				warn("Unused local variable '" + v.name + "'", v.pos);
@@ -234,28 +235,44 @@ class Compiler {
 				cur.exprs = old;
 				cur.exprs.push( { v : null, e : { d : CIf(cond, vif, velse), t : TNull, p : e.p } } );
 				return;
-			case PFor(it, first, last, loop):
-				
-				var first = compileValue(first);
-				var last = compileValue(last);
-				unify(first.t, TFloat, first.p);
-				unify(last.t, TFloat, last.p);
+			case PFor(vname, it, loop):
+				var vt = null;
+				var it = switch( it.v ) {
+				case POp(CInterval, first, last):
+					var first = compileValue(first, false, true);
+					var last = compileValue(last, false, true);
+					unify(first.t, TFloat, first.p);
+					unify(last.t, TFloat, last.p);
+					vt = TFloat;
+					{ d : COp(CInterval, first, last), t : TNull, p : e.p }
+				default:
+					var it = compileValue(it, false, true);
+					switch( it.t ) {
+					case TArray(t, 0):
+						vt = t;
+						it;
+					default:
+						error("Can only unroll loop on variable length Array", it.p);
+					}
+				}
 
-				var it = allocVar(it, VTmp, TFloat, e.p);
-				props(it).write = 1;
+				var vloop = allocVar(vname, VParam, vt, e.p);
+				props(vloop).write = 1;
 
 				var oldExprs = cur.exprs;
 				var oldWrite = [];
 				for( p in varProps )
 					oldWrite.push(p.write);
+				cur.exprs = [];
 				compileAssign(null, loop, p);
 				var eloop = cur.exprs;
 				cur.exprs = oldExprs;
 				for( i in 0...oldWrite.length )
 					varProps[i].write = oldWrite[i];
 				
-				vars.remove(it.name);
-				cur.exprs.push({ v : null, e : { d : CFor(it, first, last, eloop), t : TNull, p : e.p } });
+				vars.remove(vloop.name);
+				cur.exprs.push( { v : null, e : { d : CFor(vloop, it, eloop), t : TNull, p : e.p } } );
+				return;
 			default:
 			}
 			var e = compileValue(e);
@@ -345,7 +362,7 @@ class Compiler {
 	function allocVar( name, k, t, p ) {
 		if( k == null ) {
 			switch( t ) {
-			case TBool:
+			case TBool, TArray(_,0):
 				k = VParam;
 			case TTexture(_):
 				k = VTexture;
@@ -501,6 +518,8 @@ class Compiler {
 				Tools.makeFloat(ar.length);
 			case CObject(_):
 				error("Literal objects are not allowed", e.p);
+			case CArray(_):
+				error("Literal arrays are not allowed", e.p);
 			}
 			return { d : CConst(c), t : t, p : e.p };
 		case PLocal(v):
@@ -626,6 +645,8 @@ class Compiler {
 					error("Accessing matrix outside bounds", e2.p);
 				return { d : CRow(e1, e2), t : Tools.makeFloat(cols), p : e.p };
 			case TArray(t, size):
+				if( size == 0 )
+					error("Cannot access variable length array using [] : only for loops are allowed", e.p);
 				var c = constValue(e2);
 				if( c != null && (c < 0 || c >= size || Std.int(c) != c) )
 					error("Accessing Array outside bounds", e2.p);

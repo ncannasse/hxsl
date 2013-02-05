@@ -418,7 +418,7 @@ class ShaderMacros {
 				name : "updateVertexParams",
 				kind : FFun( {
 					ret : null,
-					args : [{ name : "_params", type : null, opt : false }, { name : "_map", type : macro : flash.Vector<Int>, opt : false }],
+					args : [{ name : "_params", type : null, opt : false }, { name : "_map", type : macro : haxe.ds.Vector<Int>, opt : false }],
 					params : [],
 					expr : { expr : EBlock(updateVertex), pos : pos },
 				}),
@@ -430,7 +430,7 @@ class ShaderMacros {
 				name : "updateFragmentParams",
 				kind : FFun( {
 					ret : null,
-					args : [{ name : "_params", type : null, opt : false }, { name : "_map", type : macro : flash.Vector<Int>, opt : false }],
+					args : [{ name : "_params", type : null, opt : false }, { name : "_map", type : macro : haxe.ds.Vector<Int>, opt : false }],
 					params : [],
 					expr : { expr : EBlock(updateFragment), pos : pos },
 				}),

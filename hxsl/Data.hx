@@ -106,6 +106,7 @@ enum CodeOp {
 	// Internal usage only
 	CAnd;
 	COr;
+	CInterval;
 }
 
 enum CodeUnop {
@@ -137,7 +138,8 @@ enum Const {
 	CBool( b : Bool );
 	CFloat( v : Float );
 	CFloats( v : Array<Float> );
-	CObject( fields : Hash<Const> );
+	CObject( fields : Map<String,Const> );
+	CArray( v : Array<Const> );
 }
 
 enum CodeValueDecl {
@@ -152,7 +154,7 @@ enum CodeValueDecl {
 	CConst( c : Const );
 	CIf( cond : CodeValue, eif : CodeBlock, eelse : Null<CodeBlock> );
 	CCond( cond : CodeValue, eif : CodeValue, eelse : CodeValue );
-	CFor( iterator : Variable, start : CodeValue, end : CodeValue, exprs : CodeBlock );
+	CFor( v : Variable, it : CodeValue, exprs : CodeBlock );
 	CVector( vals : Array<CodeValue> );
 	CRow( e1 : CodeValue, e2 : CodeValue );
 	CField( e : CodeValue, f : String );
@@ -197,7 +199,7 @@ enum ParsedValueDecl {
 	PTex( v : String, acc : ParsedValue, mode : Array<{ f : ParsedTexFlag, p : Position }> );
 	PSwiz( e : ParsedValue, swiz : Array<Comp> );
 	PIf( cond : ParsedValue, eif : ParsedValue, eelse : ParsedValue );
-	PFor( it : String, first : ParsedValue, last : ParsedValue, expr:ParsedValue );
+	PFor( v : String, iter : ParsedValue, expr:ParsedValue );
 	PCond( cond : ParsedValue, eif : ParsedValue, eelse : ParsedValue ); // inline if statement
 	PVector( el : Array<ParsedValue> );
 	PRow( e : ParsedValue, index : ParsedValue );
@@ -241,7 +243,7 @@ typedef ParsedHxsl = {
 	var globals : Array<ParsedVar>;
 	var vertex : ParsedCode;
 	var fragment : ParsedCode;
-	var helpers : Hash<ParsedCode>;
+	var helpers : Map<String,ParsedCode>;
 }
 
 typedef Error = haxe.macro.Expr.Error;
@@ -274,7 +276,9 @@ class Tools {
 		case TTexture(cube):
 			return cube ? "CubeTexture" : "Texture";
 		case TArray(t, size):
-			return typeStr(t) + "<" + size + ">";
+			return size == 0 ? "Array<" + typeStr(t)+">" : typeStr(t) + "<" + size + ">";
+		case TObject(fields):
+			return "{" + [for( f in fields ) f.name + " : " + typeStr(f.t)].join(", ") + "}";
 		default:
 			return Std.string(t).substr(1);
 		}

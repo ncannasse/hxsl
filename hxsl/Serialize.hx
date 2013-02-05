@@ -32,10 +32,10 @@ class Serialize {
 	
 	var debug : Bool;
 	var s : haxe.Serializer;
-	var savedVars : IntHash<Bool>;
+	var savedVars : Map<Int,Bool>;
 	
 	function new(debug) {
-		savedVars = new IntHash();
+		savedVars = new Map();
 		this.debug = debug;
 	}
 	
@@ -91,6 +91,7 @@ class Serialize {
 			case CFloat(f): s.serialize(f);
 			case CFloats(a): s.serialize(a);
 			case CObject(fields): s.serialize(fields);
+			case CArray(ar): s.serialize(ar);
 			}
 		case CVar(v, swiz):
 			serializeVar(v);
@@ -131,10 +132,9 @@ class Serialize {
 				serializeCodeValue(expr.v);
 				serializeCodeValue(expr.e);
 			}
-		case CFor(it, start, end, exprs):
-			serializeVar(it);
-			serializeCodeValue(start);
-			serializeCodeValue(end);
+		case CFor(v, it, exprs):
+			serializeVar(v);
+			serializeCodeValue(it);
 			s.serialize(exprs.length);
 			for ( expr in exprs ) {
 				serializeCodeValue(expr.v);

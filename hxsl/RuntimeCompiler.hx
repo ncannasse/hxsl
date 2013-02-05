@@ -48,10 +48,10 @@ private typedef VarProps = {
 **/
 class RuntimeCompiler {
 	
-	var varProps : IntHash<VarProps>;
+	var varProps : Map<Int,VarProps>;
 	var usedVars : Array<Variable>;
 	var constVars : Array<Variable>;
-	var objectVars : IntHash<{ v : Variable, fields : Hash<Variable> }>;
+	var objectVars : Map<Int,{ v : Variable, fields : Map<String,Variable> }>;
 	var varId : Int;
 	
 	// force replace of variables by their provided value
@@ -100,14 +100,14 @@ class RuntimeCompiler {
 			* true/false for Bool
 			* an Int base index in the paramsData table for all other types
 	**/
-	public function compile( data : Data, ?params : { }, ?paramsData : #if flash flash.Vector #else Array #end<Float> ) : Data {
+	public function compile( data : Data, ?params : { }, ?paramsData : haxe.ds.Vector<Float> ) : Data {
 		usedVars = [];
 		constVars = [];
-		varProps = new IntHash();
-		objectVars = new IntHash();
+		varProps = new Map();
+		objectVars = new Map();
 		defPos = data.vertex.pos;
 			
-		var hVars = new Hash();
+		var hVars = new Map();
 		for( v in data.globals.concat(data.vertex.args).concat(data.fragment.args) )
 			switch( v.kind ) {
 			case VConst, VParam:
@@ -124,7 +124,9 @@ class RuntimeCompiler {
 				var val : Dynamic = Reflect.field(params, f);
 				if( val == null )
 					continue;
-				function makeVal(val:Dynamic,t:VarType) {
+				function makeVal(val:Dynamic, t:VarType) {
+					if( val == null )
+						return CNull;
 					switch( t ) {
 					case TNull, TTexture(_): throw "assert";
 					case TBool:
@@ -135,6 +137,11 @@ class RuntimeCompiler {
 						if( !Std.is(val, Float) )
 							error("Invalid value for parameter " + v.name, null);
 						return CFloat(val);
+					case TArray(t, 0):
+						if( !Std.is(val, Array) )
+							error("Invalid value for parameter " + v.name, null);
+						var a : Array<Dynamic> = val;
+						return CArray([for( v in a ) makeVal(v, t)]);
 					case TInt, TFloat2, TFloat3, TFloat4, TMatrix(_), TArray(_):
 						if( !Std.is(val, Int) )
 							error("Invalid value for parameter " + v.name, null);
@@ -150,7 +157,7 @@ class RuntimeCompiler {
 					case TObject(fields):
 						if( !Reflect.isObject(val) )
 							error("Invalid value for parameter " + v.name, null);
-						var obj = new Hash();
+						var obj = new Map();
 						for( f in fields ) {
 							var fv = Reflect.field(val, f.name);
 							if( fv != null )
@@ -164,20 +171,16 @@ class RuntimeCompiler {
 		
 		var vertex = compileCode(data.vertex);
 		var vconst = constVars;
-		var vobjects = objectVars;
 		constVars = [];
-		objectVars = new IntHash();
 		
 		var fragment = compileCode(data.fragment);
 		var fconst = constVars;
-		var fobjects = objectVars;
 		constVars = [];
-		objectVars = new IntHash();
 		
 		usedVars.sort(sortById);
 		
-		indexVars(vertex, vconst, vobjects);
-		indexVars(fragment, fconst, fobjects);
+		indexVars(vertex, vconst);
+		indexVars(fragment, fconst);
 		
 		var globals = [];
 		for( v in usedVars ) {
@@ -197,7 +200,7 @@ class RuntimeCompiler {
 		return s != null && s.length > 1 && (s[0] != X || s[1] != Y || (s.length > 2 && (s[2] != Z || (s.length > 3 && s[3] != W))));
 	}
 	
-	function indexVars( c : Code, constVars : Array<Variable>, objectVars : IntHash<{ v : Variable, fields : Hash<Variable> }> ) {
+	function indexVars( c : Code, constVars : Array<Variable> ) {
 		var indexes = [0, 0, 0, 0, 0, 0];
 
 		function calculateUsedSize( v : Variable, index : { i : Int } ) {
@@ -449,7 +452,7 @@ class RuntimeCompiler {
 		case CInt(i): i != 0;
 		case CFloat(f): f != 0;
 		case CBool(b): b;
-		case CFloats(_), CObject(_): true;
+		case CFloats(_), CObject(_), CArray(_): true;
 		};
 	}
 
@@ -476,8 +479,29 @@ class RuntimeCompiler {
 					compileAssign(e.v, e.e);
 			}
 			return;
-		case CFor(_):
-			throw "TODO";
+		case CFor(v,it,exprs):
+			switch( it.d ) {
+			case COp(CInterval, _first, _max):
+				throw "TODO";
+			default:
+				switch( compileCond(it) ) {
+				case CArray(vl):
+					var p = props(v);
+					var count = 0;
+					for( val in vl ) {
+						p.newVar = allocVar("$" + v.name + "#" + (count++), VConst, v.type, e.p);
+						usedVars.push(p.newVar);
+						props(p.newVar).value = p.value = val;
+						for( e in exprs )
+							compileAssign(e.v, e.e);
+					}
+				case CNull:
+					// consider that we don't iterate over null array
+				default:
+					throw "assert";
+				}
+			}
+			return;
 		case CUnop(op, _):
 			switch( op ) {
 			case CKill:
@@ -630,6 +654,7 @@ class RuntimeCompiler {
 			case CMin: return const(function(a, b) return a < b ? a : b);
 			case CMax: return const(function(a, b) return a > b ? a : b);
 			case CCross:
+			case CInterval: throw "assert";
 			}
 		}
 		// force const building
@@ -783,9 +808,10 @@ class RuntimeCompiler {
 			v = compileValue(v, isTarget);
 			switch( v.d ) {
 			case CVar(v, _):
+				trace(v.id + ":" + f);
 				var obj = objectVars.get(v.id);
 				if( obj == null ) {
-					obj = { v : v, fields : new Hash() };
+					obj = { v : v, fields : new Map() };
 					objectVars.set(v.id, obj);
 				}
 				var v2 = obj.fields.get(f);

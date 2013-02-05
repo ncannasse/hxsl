@@ -41,11 +41,15 @@ class Main {
 	
 	static function agalToBytes( c : format.agal.Data ) {
 		var o = new haxe.io.BytesOutput();
-		new format.agal.Writer(o).write(c);
+		try {
+			new format.agal.Writer(o).write(c);
+		} catch( e : Dynamic ) {
+			
+		}
 		return o.getBytes();
 	}
 	
-	static function compileShader( shader : Expr, params : {} ) {
+	static function compileShader( shader : Expr, params : { } ) {
 		var p = new hxsl.Parser().parse(shader);
 		var c = new hxsl.Compiler();
 		var warnings = [];
@@ -139,7 +143,7 @@ class Main {
 	}
 
 	static function checkShaders() {
-
+/*
 		// basic shader
 		test({
 			var input : {
@@ -529,6 +533,70 @@ class Main {
 			mov t0.xyz, c0.xyy
 			mov out, t0
 		", { alphaMult : { t : 0.5 } });
+		
+
+		error( {
+			var pos : Input<Float3>;
+			var index : Input<Float>;
+			var tmp : Array<{ add : Float3, mul : Float3 }>;
+			
+			function vertex() {
+				out = tmp[index].add;
+			}
+			
+			function fragment() {
+				out = [0, 0, 0, 0];
+			}
+		},"Cannot access variable length array using [] : only for loops are allowed");
+
+		test( {
+			var pos : Input<Float3>;
+			var tmp : Array<{ add : Float3, mul : Float3 }>;
+			
+			function vertex() {
+				var tpos = pos.xyzw;
+				for( t in tmp )
+					tpos.xyz += t.add * t.mul;
+				out = tpos;
+			}
+			
+			function fragment() {
+				out = [0,0,0,0];
+			}
+		},"
+			mov t0, a0.xyzw
+			mov out, t0
+			
+			mov out, c0.xxxx
+		",{ tmp : null });
+*/
+		//
+		test( {
+			var pos : Input<Float3>;
+			var tmp : Array<{ add : Float4, mul : Float4 }>;
+			
+			function vertex() {
+				var tpos = pos.xyzw;
+				for( t in tmp )
+					tpos += t.add * t.mul;
+				out = tpos;
+			}
+			
+			function fragment() {
+				out = [0,0,0,0];
+			}
+		},"
+			mov t0, a0.xyzw
+			mov t1, c0
+			mul t2, t1, c1
+			add t3, t0, t2
+			mov t4, c2
+			mul t5, t4, c3
+			add t6, t3, t5
+			mov out, t6
+			
+			mov out, c0.xxxx
+		",{ tmp : [null,null] });
 
 		trace(COUNT+" shaders checked");
 	}

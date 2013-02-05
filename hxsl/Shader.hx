@@ -24,6 +24,7 @@
 package hxsl;
 
 import hxsl.Data;
+import haxe.ds.Vector;
 
 /**
 	A ShaderInstance is a compiled version of a shader for a given set of parameters.
@@ -38,14 +39,14 @@ class ShaderInstance {
 	public var bufferNames : Array<String>;
 	public var stride : Int;
 
-	public var vertexVars : flash.Vector<Float>;
-	public var fragmentVars : flash.Vector<Float>;
-	public var textures : flash.Vector<ShaderTypes.Texture>;
+	public var vertexVars : Vector<Float>;
+	public var fragmentVars : Vector<Float>;
+	public var textures : Vector<ShaderTypes.Texture>;
 	public var curShaderId : Int;
 
-	public var vertexMap : flash.Vector<Int>;
-	public var fragmentMap : flash.Vector<Int>;
-	public var textureMap : flash.Vector<Int>;
+	public var vertexMap : Vector<Int>;
+	public var fragmentMap : Vector<Int>;
+	public var textureMap : Vector<Int>;
 	
 	public var vertexBytes : haxe.io.Bytes;
 	public var fragmentBytes : haxe.io.Bytes;
@@ -71,8 +72,8 @@ class ShaderGlobals {
 	public var hasParamObject : Bool;
 
 	var constCount : Int;
-	var instances : IntHash<ShaderInstance>;
-	var hparams : IntHash<hxsl.Data.Variable>;
+	var instances : Map<Int,ShaderInstance>;
+	var hparams : Map<Int,hxsl.Data.Variable>;
 	
 	public function new( hxStr : String ) {
 		this.data = hxsl.Unserialize.unserialize(hxStr);
@@ -86,7 +87,7 @@ class ShaderGlobals {
 			case TObject(_): hasParamObject = true;
 			}
 		}
-		hparams = new IntHash();
+		hparams = new Map();
 		for( v in Tools.getAllVars(data) )
 			switch( v.kind ) {
 			case VParam:
@@ -102,14 +103,14 @@ class ShaderGlobals {
 			default:
 			}
 		
-		instances = new IntHash();
+		instances = new Map();
 	}
 	
 	function build( code : hxsl.Data.Code ) {
 			
 		// init map
 		var nregs = 0;
-		var map = new flash.Vector(constCount);
+		var map = new Vector(constCount);
 		for( i in 0...constCount )
 			map[i] = -1;
 			
@@ -124,7 +125,7 @@ class ShaderGlobals {
 		// add consts
 		var pos = nregs * 4;
 		nregs += code.consts.length;
-		var consts = new flash.Vector(nregs * 4);
+		var consts = new Vector(nregs * 4);
 		for( c in code.consts ) {
 			for( v in c )
 				consts[pos++] = v;
@@ -173,13 +174,14 @@ class ShaderGlobals {
 		i.fragmentMap = f.map;
 		i.fragmentVars = f.consts;
 				
-		i.textureMap = new flash.Vector();
+		var tmap = new Array();
 		for( v in data2.vertex.args.concat(data2.fragment.args) )
 			if( v.kind == VTexture ) {
 				var realV = hparams.get(v.id);
-				i.textureMap.push(realV.index);
+				tmap.push(realV.index);
 			}
-		i.textures = new flash.Vector(i.textureMap.length);
+		i.textureMap = Vector.fromArrayCopy(tmap);
+		i.textures = new Vector(i.textureMap.length());
 		
 		i.bufferFormat = 0;
 		i.bufferNames = [];
@@ -303,10 +305,10 @@ class Shader {
 			i.program.upload(vdata,fdata);
 		}
 		ctx.setProgram(i.program);
-		ctx.setProgramConstantsFromVector(flash.display3D.Context3DProgramType.VERTEX, 0, i.vertexVars);
-		ctx.setProgramConstantsFromVector(flash.display3D.Context3DProgramType.FRAGMENT, 0, i.fragmentVars);
-		for( k in 0...i.textures.length )
-			ctx.setTextureAt(k, i.textures[k]);
+		ctx.setProgramConstantsFromVector(flash.display3D.Context3DProgramType.VERTEX, 0, i.vertexVars.toData());
+		ctx.setProgramConstantsFromVector(flash.display3D.Context3DProgramType.FRAGMENT, 0, i.fragmentVars.toData());
+		for( k in 0...i.textures.length() )
+			ctx.setTextureAt(k, i.textures.get(k));
 		var FORMAT = [
 			flash.display3D.Context3DVertexBufferFormat.BYTES_4,
 			flash.display3D.Context3DVertexBufferFormat.FLOAT_1,
@@ -328,7 +330,7 @@ class Shader {
 		var i = instance;
 		if( i == null )
 			return;
-		for( k in 0...i.textures.length )
+		for( k in 0...i.textures.length() )
 			ctx.setTextureAt(k, null);
 		var pos = 0, offset = 0;
 		var bits = i.bufferFormat;
@@ -346,19 +348,19 @@ class Shader {
 		// copy vars from our local shader to the instance
 		updateVertexParams(instance.vertexVars, instance.vertexMap);
 		updateFragmentParams(instance.fragmentVars, instance.fragmentMap);
-		for( i in 0...instance.textureMap.length )
-			instance.textures[i] = allTextures[instance.textureMap[i]];
+		for( i in 0...instance.textureMap.length() )
+			instance.textures.set(i,allTextures[instance.textureMap.get(i)]);
 		instance.curShaderId = shaderId;
 		instance.varsChanged = true;
 	}
 	
-	function updateVertexParams( params : flash.Vector<Float>, map : flash.Vector<Int> ) {
+	function updateVertexParams( params : Vector<Float>, map : Vector<Int> ) {
 	}
 
-	function updateFragmentParams( params : flash.Vector<Float>, map : flash.Vector<Int> ) {
+	function updateFragmentParams( params : Vector<Float>, map : Vector<Int> ) {
 	}
 	
-	inline function saveFloats( params : flash.Vector<Float>, index : Int, v : ShaderTypes.Vector, n : Int ) {
+	inline function saveFloats( params : Vector<Float>, index : Int, v : ShaderTypes.Vector, n : Int ) {
 		if( index >= 0 ) {
 			params[index] = v.x;
 			params[index + 1] = v.y;
@@ -367,7 +369,7 @@ class Shader {
 		}
 	}
 	
-	inline function saveInt( params : flash.Vector<Float>, index : Int, v : Int ) {
+	inline function saveInt( params : Vector<Float>, index : Int, v : Int ) {
 		if( index >= 0 ) {
 			params[index] = ((v >> 16) & 0xFF) / 255;
 			params[index + 1] = ((v >> 8) & 0xFF) / 255;
@@ -376,11 +378,11 @@ class Shader {
 		}
 	}
 	
-	inline function saveFloat( params : flash.Vector<Float>, index : Int, v : Float ) {
+	inline function saveFloat( params : Vector<Float>, index : Int, v : Float ) {
 		if( index >= 0 ) params[index] = v;
 	}
 
-	inline function saveMatrix( params : flash.Vector<Float>, index : Int, m : ShaderTypes.Matrix, r : Int, c : Int ) {
+	inline function saveMatrix( params : Vector<Float>, index : Int, m : ShaderTypes.Matrix, r : Int, c : Int ) {
 		if( index >= 0 ) {
 			#if h3d
 			params[index++] = m._11;
@@ -439,7 +441,7 @@ class Shader {
 		}
 	}
 
-	inline function saveMatrixT( params : flash.Vector<Float>, index : Int, m : ShaderTypes.Matrix, r : Int, c : Int ) {
+	inline function saveMatrixT( params : Vector<Float>, index : Int, m : ShaderTypes.Matrix, r : Int, c : Int ) {
 		if( index >= 0 ) {
 			#if h3d
 			params[index++] = m._11;

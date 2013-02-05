@@ -649,7 +649,7 @@ class AgalCompiler {
 			case CNeq: OSne;
 			case CLt: OSlt;
 			case CMod: modGenerate;
-			case COr, CAnd, CLte, CGt: throw "assert";
+			case COr, CAnd, CLte, CGt, CInterval: throw "assert";
 			})(dst, v1, v2));
 		case CUnop(op, p):
 			var v = compileSrc(p);

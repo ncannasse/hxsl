@@ -30,12 +30,12 @@ import hxsl.Data;
 class Unserialize {
 
 	var s : haxe.Unserializer;
-	var vars : IntHash<Variable>;
+	var vars : Map<Int,Variable>;
 	var debug : Bool;
 	
 	function new(str) {
 		s = new haxe.Unserializer(str);
-		vars = new IntHash();
+		vars = new Map();
 	}
 	
 	public static function unserialize( s : String ) : Data {
@@ -163,9 +163,8 @@ class Unserialize {
 			var e2 = unserializeCodeValue();
 			CCond(cond, e1, e2);
 		case 10:
-			var it = unserializeVar();
-			var start = unserializeCodeValue();
-			var end = unserializeCodeValue();
+			var v = unserializeVar();
+			var it = unserializeCodeValue();
 			var numExprs:Int = s.unserialize();
 			var exprs = [];
 			for ( i in 0...numExprs ) {
@@ -173,7 +172,7 @@ class Unserialize {
 				var e = unserializeCodeValue();
 				exprs.push( {v : v, e : e} );
 			}
-			CFor(it, start, end, exprs);
+			CFor(v, it, exprs);
 		case 11:
 			var numVals = s.unserialize();
 			var vals = [];
