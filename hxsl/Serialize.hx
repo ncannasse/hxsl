@@ -185,6 +185,12 @@ class Serialize {
 		case TArray(atype, size):
 			serializeVarType(atype);
 			s.serialize(size);
+		case TObject(fields):
+			s.serialize(fields.length);
+			for( f in fields ) {
+				s.serialize(f.name);
+				serializeVarType(f.t);
+			}
 		default:
 		}
 	}

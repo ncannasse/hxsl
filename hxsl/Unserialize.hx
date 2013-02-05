@@ -221,6 +221,8 @@ class Unserialize {
 			var type = unserializeVarType();
 			var size = s.unserialize();
 			return TArray(type, size);
+		case 10:
+			return TObject([for( k in 0...s.unserialize() ) { name : cast s.unserialize(), t : unserializeVarType() } ]);
 		default:
 			return Type.createEnumIndex(VarType, typeIndex);
 		}
