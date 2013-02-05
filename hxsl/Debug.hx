@@ -65,18 +65,23 @@ class Debug {
 		return valueStr(v) +" = " + valueStr(e);
 	}
 	
+	public static function constStr( c : Const ) {
+		return switch(c) {
+		case CNull: "null";
+		case CInt(i): i + "i";
+		case CFloat(v): v + "f";
+		case CBool(b): b ? "true":"false";
+		case CFloats(a): Std.string(a);
+		case CObject(fields): "{" + [for( f in fields.keys() ) f + " : " + constStr(fields.get(f))].join(", ") + "}";
+		};
+	}
+	
 	public static function valueStr( v : CodeValue ) {
 		if( v == null )
 			return "NULL";
 		return switch( v.d ) {
 		case CConst(c):
-			switch(c) {
-			case CNull: "null";
-			case CInt(i): i + "i";
-			case CFloat(v): v + "f";
-			case CBool(b): b ? "true":"false";
-			case CFloats(a): Std.string(a);
-			}
+			constStr(c);
 		case CVar(v, swiz):
 			var str;
 			if( v.name.charAt(0) == "$" )
@@ -143,7 +148,9 @@ class Debug {
 		case CCond(cond, eif, eelse):
 			"(" + valueStr(cond) + " ? " + valueStr(eif) + " : " + valueStr(eelse) + ")";
 		case CAccess(v, idx):
-			"~" + v.name+"#"+v.id + "[" + valueStr(idx) + "]";
+			"~" + v.name + "#" + v.id + "[" + valueStr(idx) + "]";
+		case CField(e, f):
+			valueStr(e) + "." + f;
 		}
 	}
 	

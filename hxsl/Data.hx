@@ -74,6 +74,7 @@ enum VarType {
 	TMatrix( r : Int, c : Int, transpose : { t : Null<Bool> } );
 	TTexture( cube : Bool );
 	TArray( t : VarType, size : Int );
+	TObject( fields : Array<{ name : String, t : VarType }> );
 }
 
 typedef Variable = {
@@ -136,6 +137,7 @@ enum Const {
 	CBool( b : Bool );
 	CFloat( v : Float );
 	CFloats( v : Array<Float> );
+	CObject( fields : Hash<Const> );
 }
 
 enum CodeValueDecl {
@@ -153,6 +155,7 @@ enum CodeValueDecl {
 	CFor( iterator : Variable, start : CodeValue, end : CodeValue, exprs : CodeBlock );
 	CVector( vals : Array<CodeValue> );
 	CRow( e1 : CodeValue, e2 : CodeValue );
+	CField( e : CodeValue, f : String );
 }
 
 typedef CodeBlock = Array<{ v: Null<CodeValue>, e:CodeValue }>;
@@ -201,6 +204,7 @@ enum ParsedValueDecl {
 	PBlock( el : Array<ParsedExpr> );
 	PReturn( e : ParsedValue );
 	PCall( n : String, vl : Array<ParsedValue> );
+	PField( e : ParsedValue, field : String );
 }
 
 enum ParsedTexFlag {
@@ -287,6 +291,11 @@ class Tools {
 				t.t ? w : h;
 		case TArray(t, size):
 			regSize(t) * size;
+		case TObject(fields):
+			var k = 0;
+			for( f in fields )
+				k += regSize(f.t);
+			k;
 		default:
 			1;
 		}
@@ -306,6 +315,8 @@ class Tools {
 			var size = floatSize(t);
 			if( size < 4 ) size = 4;
 			size * count;
+		case TObject(_):
+			regSize(t) * 4;
 		}
 	}
 

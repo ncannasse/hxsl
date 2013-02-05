@@ -68,6 +68,7 @@ class ShaderGlobals {
 	public var texSize : Int;
 	public var hasParamVector : Bool;
 	public var hasParamMatrix : Bool;
+	public var hasParamObject : Bool;
 
 	var constCount : Int;
 	var instances : IntHash<ShaderInstance>;
@@ -82,6 +83,7 @@ class ShaderGlobals {
 			case TFloat2, TFloat3, TFloat4: hasParamVector = true;
 			case TArray(t, _): checkType(t);
 			case TMatrix(_): hasParamMatrix = true;
+			case TObject(_): hasParamObject = true;
 			}
 		}
 		hparams = new IntHash();

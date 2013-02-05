@@ -16,9 +16,9 @@ class TestShader extends hxsl.Shader {
 		var tuv : Float2;
 		var dpos : Float4;
 		function vertex( mproj : Matrix ) {
-			var tmp = (dpos == null ? pos.xyzw : pos.xyzw * dpos) * mproj;
+			var tmp = (dpos == null ? input.pos.xyzw : input.pos.xyzw * dpos) * mproj;
 			out = tmp;
-			tuv = uv;
+			tuv = input.uv;
 		}
 		function fragment( tex : Texture ) {
 			out = tex.get(tuv);
@@ -148,9 +148,9 @@ class Main {
 			};
 			var tuv : Float2;
 			function vertex( mproj : Matrix ) {
-				var tmp = pos.xyzw * mproj;
+				var tmp = input.pos.xyzw * mproj;
 				out = tmp;
-				tuv = uv;
+				tuv = input.uv;
 			}
 			function fragment( tex : Texture ) {
 				out = tex.get(tuv);
@@ -171,8 +171,8 @@ class Main {
 			};
 			var color : Float3;
 			function vertex( mpos : M44, mproj : M44 ) {
-				out = pos.xyzw * mpos * mproj;
-				color = pos;
+				out = input.pos.xyzw * mpos * mproj;
+				color = input.pos;
 			}
 			function fragment() {
 				out = color.xyzw;
@@ -243,7 +243,7 @@ class Main {
 				pos : Float3,
 			};
 			function vertex() {
-				out = pos.xyzw;
+				out = input.pos.xyzw;
 			}
 			function fragment() {
 			}
@@ -329,8 +329,8 @@ class Main {
 			var uvDelta : Param<Float2>;
 			
 			function vertex( mpos : Matrix, mproj : Matrix ) {
-				out = if( useMatrixPos ) (pos.xyzw * mpos) * mproj else pos.xyzw * mproj;
-				var t = uv;
+				out = if( useMatrixPos ) (input.pos.xyzw * mpos) * mproj else input.pos.xyzw * mproj;
+				var t = input.uv;
 				if( uvScale != null ) t *= uvScale;
 				if( uvDelta != null ) t += uvDelta;
 				tuv = t;
@@ -367,8 +367,8 @@ class Main {
 			var uvDelta : Param<Float2>;
 			
 			function vertex( mpos : Matrix, mproj : Matrix ) {
-				out = if( useMatrixPos ) (pos.xyzw * mpos) * mproj else pos.xyzw * mproj;
-				var t = uv;
+				out = if( useMatrixPos ) (input.pos.xyzw * mpos) * mproj else input.pos.xyzw * mproj;
+				var t = input.uv;
 				if( uvScale != null ) t *= uvScale;
 				if( uvDelta != null ) t += uvDelta;
 				tuv = t;
@@ -414,11 +414,9 @@ class Main {
 
 		// skinning
 		test({
-			var input : {
-				pos : Float3,
-				weights : Float3,
-				index : Int,
-			}
+			var pos : Input<Float3>;
+			var weights : Input<Float3>;
+			var index : Input<Int>;
 
 			function vertex( mpos : Matrix, mproj : Matrix, bones : M34<39> ) {
 				var p : Float4;
@@ -470,8 +468,8 @@ class Main {
 			var alphaMult : Float;
 			var talpha : Float;
 			function vertex() {
-				out = pos.xyzw;
-				if( alphaMult != null ) talpha = alpha * alphaMult;
+				out = input.pos.xyzw;
+				if( alphaMult != null ) talpha = input.alpha * alphaMult;
 			}
 			function fragment() {
 				out = [1, 0, 0, alphaMult == null ? 1 : talpha];
@@ -490,8 +488,8 @@ class Main {
 			var alphaMult : Float;
 			var talpha : Float;
 			function vertex() {
-				out = pos.xyzw;
-				if( alphaMult != null ) talpha = alpha * alphaMult;
+				out = input.pos.xyzw;
+				if( alphaMult != null ) talpha = input.alpha * alphaMult;
 			}
 			function fragment() {
 				out = [1, 0, 0, alphaMult == null ? 1 : talpha];
@@ -506,6 +504,31 @@ class Main {
 			mov out, t0
 		", { alphaMult : 0.5 });
 		
+		// object parameter
+		
+		test({
+			var input : {
+				pos : Float3,
+				alpha : Float,
+			}
+			var alphaMult : { unused : Float, t : Float };
+			var talpha : Float;
+			function vertex() {
+				out = input.pos.xyzw;
+				if( alphaMult != null ) talpha = input.alpha * alphaMult.t;
+			}
+			function fragment() {
+				out = [1, 0, 0, alphaMult == null ? 1 : talpha];
+			}
+		},"
+			mov out, a0.xyzw
+			mul v0.x, a1.x, c0.x
+			mov v0.yzw, c1.xxx
+			
+			mov t0.w, v0.x
+			mov t0.xyz, c0.xyy
+			mov out, t0
+		", { alphaMult : { t : 0.5 } });
 
 		trace(COUNT+" shaders checked");
 	}

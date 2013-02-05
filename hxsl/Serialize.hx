@@ -90,6 +90,7 @@ class Serialize {
 			case CInt(i): s.serialize(i);
 			case CFloat(f): s.serialize(f);
 			case CFloats(a): s.serialize(a);
+			case CObject(fields): s.serialize(fields);
 			}
 		case CVar(v, swiz):
 			serializeVar(v);
@@ -149,6 +150,9 @@ class Serialize {
 		case CRow(e1, e2):
 			serializeCodeValue(e1);
 			serializeCodeValue(e2);
+		case CField(e, f):
+			serializeCodeValue(e);
+			s.serialize(f);
 		}
 
 		serializeVarType(v.t);

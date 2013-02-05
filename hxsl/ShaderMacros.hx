@@ -31,22 +31,23 @@ import hxsl.Data;
 class ShaderMacros {
 
 	static function realType( t : VarType, p : Position ) : ComplexType {
-		return TPath(switch( t ) {
+		return switch( t ) {
 		case TNull: throw "assert";
-		case TBool: { pack : [], name : "Bool", params : [], sub : null };
-		case TFloat: { pack : [], name : "Float", params : [], sub : null };
-		case TFloat2, TFloat3, TFloat4: { pack : ["hxsl"], name : "ShaderTypes", params : [], sub : "Vector" };
-		case TInt: { pack : [], name : "Int", params : [], sub : null };
-		case TMatrix(_): { pack : ["hxsl"], name: "ShaderTypes", params : [], sub : "Matrix" };
-		case TTexture(_): { pack : ["hxsl"], name : "ShaderTypes", params : [], sub : "Texture" };
-		case TArray(t, size): { pack : ["hxsl"], name : "ShaderTypes", sub : "FixedArray", params : [TPType(realType(t,p)), TPExpr( { expr : EConst(CInt(""+size)), pos : p } )] };
-		});
+		case TBool: TPath({ pack : [], name : "Bool", params : [], sub : null });
+		case TFloat: TPath({ pack : [], name : "Float", params : [], sub : null });
+		case TFloat2, TFloat3, TFloat4: TPath({ pack : ["hxsl"], name : "ShaderTypes", params : [], sub : "Vector" });
+		case TInt: TPath({ pack : [], name : "Int", params : [], sub : null });
+		case TMatrix(_): TPath({ pack : ["hxsl"], name: "ShaderTypes", params : [], sub : "Matrix" });
+		case TTexture(_): TPath({ pack : ["hxsl"], name : "ShaderTypes", params : [], sub : "Texture" });
+		case TArray(t, size): TPath({ pack : ["hxsl"], name : "ShaderTypes", sub : "FixedArray", params : [TPType(realType(t, p)), TPExpr( { expr : EConst(CInt("" + size)), pos : p } )] });
+		case TObject(fields): TAnonymous([for( f in fields ) { name : f.name, pos : p, kind : FVar(realType(f.t, p)), access : [], meta : [], doc :null }]);
+		};
 	}
 	
 	static function isMutable( t : VarType ) {
 		return switch( t ) {
 		case TNull,TFloat, TBool, TInt, TTexture(_): false;
-		case TFloat2, TFloat3, TFloat4, TMatrix(_), TArray(_): true;
+		case TFloat2, TFloat3, TFloat4, TMatrix(_), TArray(_), TObject(_): true;
 		};
 	}
 
@@ -83,6 +84,14 @@ class ShaderMacros {
 					$save;
 				}
 			}
+		case TObject(fields):
+			var saves = [];
+			var delta = 0;
+			for( f in fields ) {
+				saves.push(saveType(f.t, EBinop(OpAdd,{ expr : eindex, pos : pos },{ expr : EConst(CInt(""+delta)), pos : pos }), { expr : EField(evar, f.name), pos : pos }, pos));
+				delta += Tools.regSize(f.t) * 4;
+			}
+			return { expr : EBlock(saves), pos : pos };
 		}
 		return { expr : ECall( { expr : EConst(CIdent("save" + name)), pos : pos }, args), pos : pos };
 	}
@@ -144,7 +153,7 @@ class ShaderMacros {
 		// create all the variables accessors
 		var allVars = Tools.getAllVars(data);
 		
-		var updates = [], constructs = [], paramCount = 0, texCount = 0, paramVectorCount = 0, paramMatrixCount = 0, constCount = 0;
+		var updates = [], constructs = [], paramCount = 0, texCount = 0, paramVectorCount = 0, paramMatrixCount = 0, paramObjectCount = 0, constCount = 0;
 		
 		for( v in allVars ) {
 			var pos = v.pos;
@@ -289,6 +298,8 @@ class ShaderMacros {
 						evar = { expr : EArray( { expr : EConst(CIdent("paramVectors")), pos : pos }, { expr : EConst(CInt("" + paramVectorCount++)), pos : pos } ), pos : pos };
 					case TMatrix(_):
 						evar = { expr : EArray( { expr : EConst(CIdent("paramMatrixes")), pos : pos }, { expr : EConst(CInt("" + paramMatrixCount++)), pos : pos } ), pos : pos };
+					case TObject(_):
+						evar = { expr : EArray( { expr : EConst(CIdent("paramObjects")), pos : pos }, { expr : EConst(CInt("" + paramObjectCount++)), pos : pos } ), pos : pos };
 					}
 
 					fields.push( {

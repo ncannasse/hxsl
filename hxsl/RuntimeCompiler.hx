@@ -48,9 +48,10 @@ private typedef VarProps = {
 **/
 class RuntimeCompiler {
 	
-	var varProps : Array<VarProps>;
+	var varProps : IntHash<VarProps>;
 	var usedVars : Array<Variable>;
-	var extraVars : Array<Variable>;
+	var constVars : Array<Variable>;
+	var objectVars : IntHash<{ v : Variable, fields : Hash<Variable> }>;
 	var varId : Int;
 	
 	// force replace of variables by their provided value
@@ -76,7 +77,7 @@ class RuntimeCompiler {
 	}
 	
 	function props( v : Variable ) {
-		var p = varProps[v.id];
+		var p = varProps.get(v.id);
 		if( p == null ) {
 			p = {
 				global : false,
@@ -87,7 +88,7 @@ class RuntimeCompiler {
 				isVertex : false,
 				ref : null,
 			}
-			varProps[v.id] = p;
+			varProps.set(v.id,p);
 		}
 		return p;
 	}
@@ -101,8 +102,9 @@ class RuntimeCompiler {
 	**/
 	public function compile( data : Data, ?params : { }, ?paramsData : #if flash flash.Vector #else Array #end<Float> ) : Data {
 		usedVars = [];
-		varProps = [];
-		extraVars = [];
+		constVars = [];
+		varProps = new IntHash();
+		objectVars = new IntHash();
 		defPos = data.vertex.pos;
 			
 		var hVars = new Hash();
@@ -122,43 +124,60 @@ class RuntimeCompiler {
 				var val : Dynamic = Reflect.field(params, f);
 				if( val == null )
 					continue;
-				switch( v.type ) {
-				case TNull, TTexture(_): throw "assert";
-				case TBool:
-					if( !Std.is(val, Bool) )
-						error("Invalid value for parameter " + v.name, null);
-					props(v).value = CBool(val);
-				case TFloat:
-					if( !Std.is(val, Float) )
-						error("Invalid value for parameter " + v.name, null);
-					props(v).value = CFloat(val);
-				case TInt, TFloat2, TFloat3, TFloat4, TMatrix(_), TArray(_):
-					if( !Std.is(val, Int) )
-						error("Invalid value for parameter " + v.name, null);
-					var index : Int = val;
-					var size = Tools.floatSize(v.type);
-					var a = [];
-					for( i in 0...size ) {
-						var v = paramsData == null ? 0 : paramsData[i + index];
-						#if !flash if( v == null ) v = 0; #end
-						a.push(v);
+				function makeVal(val:Dynamic,t:VarType) {
+					switch( t ) {
+					case TNull, TTexture(_): throw "assert";
+					case TBool:
+						if( !Std.is(val, Bool) )
+							error("Invalid value for parameter " + v.name, null);
+						return CBool(val);
+					case TFloat:
+						if( !Std.is(val, Float) )
+							error("Invalid value for parameter " + v.name, null);
+						return CFloat(val);
+					case TInt, TFloat2, TFloat3, TFloat4, TMatrix(_), TArray(_):
+						if( !Std.is(val, Int) )
+							error("Invalid value for parameter " + v.name, null);
+						var index : Int = val;
+						var size = Tools.floatSize(v.type);
+						var a = [];
+						for( i in 0...size ) {
+							var v = paramsData == null ? 0 : paramsData[i + index];
+							#if !flash if( v == null ) v = 0; #end
+							a.push(v);
+						}
+						return a.length == 1 ? CFloat(a[0]) : CFloats(a);
+					case TObject(fields):
+						if( !Reflect.isObject(val) )
+							error("Invalid value for parameter " + v.name, null);
+						var obj = new Hash();
+						for( f in fields ) {
+							var fv = Reflect.field(val, f.name);
+							if( fv != null )
+								obj.set(f.name, makeVal(fv, f.t));
+						}
+						return CObject(obj);
 					}
-					props(v).value = a.length == 1 ? CFloat(a[0]) : CFloats(a);
 				}
+				props(v).value = makeVal(val, v.type);
 			}
 		
 		var vertex = compileCode(data.vertex);
-		var vextra = extraVars;
-		extraVars = [];
+		var vconst = constVars;
+		var vobjects = objectVars;
+		constVars = [];
+		objectVars = new IntHash();
 		
 		var fragment = compileCode(data.fragment);
-		var fextra = extraVars;
-		extraVars = [];
+		var fconst = constVars;
+		var fobjects = objectVars;
+		constVars = [];
+		objectVars = new IntHash();
 		
 		usedVars.sort(sortById);
 		
-		indexVars(vertex, vextra);
-		indexVars(fragment, fextra);
+		indexVars(vertex, vconst, vobjects);
+		indexVars(fragment, fconst, fobjects);
 		
 		var globals = [];
 		for( v in usedVars ) {
@@ -178,15 +197,39 @@ class RuntimeCompiler {
 		return s != null && s.length > 1 && (s[0] != X || s[1] != Y || (s.length > 2 && (s[2] != Z || (s.length > 3 && s[3] != W))));
 	}
 	
-	function indexVars( c : Code, extraVars : Array<Variable> ) {
+	function indexVars( c : Code, constVars : Array<Variable>, objectVars : IntHash<{ v : Variable, fields : Hash<Variable> }> ) {
 		var indexes = [0, 0, 0, 0, 0, 0];
+
+		function calculateUsedSize( v : Variable, index : { i : Int } ) {
+			v.index = index.i;
+			var p = props(v);
+			if( p.ref != null ) p.ref.index = v.index;
+			
+			switch( v.type ) {
+			case TObject(fields):
+				var o = objectVars.get(v.id);
+				if( o == null ) throw "assert"; // not really used it seems ?
+				// only take into account the actual used registers
+				var tot = 0;
+				for( f in fields ) {
+					var fv = o.fields.get(f.name);
+					if( fv != null ) {
+						var k = calculateUsedSize(fv, index);
+						index.i += k;
+						tot += k;
+					}
+				}
+				return tot;
+			default:
+				return Tools.regSize(v.type);
+			}
+		}
+		
 		for( v in usedVars ) {
 			var p = props(v);
 			if( p.isVertex == c.vertex ) {
 				var tkind = Type.enumIndex(v.kind);
-				var size = Tools.regSize(v.type);
-				v.index = indexes[tkind];
-				if( p.ref != null ) p.ref.index = v.index;
+				var size = calculateUsedSize(v,{ i : indexes[tkind] });
 				indexes[tkind] += size;
 				switch( v.kind ) {
 				case VConst, VTexture:
@@ -200,9 +243,10 @@ class RuntimeCompiler {
 		}
 		// move consts at the end
 		var cdelta = indexes[Type.enumIndex(VConst)];
-		for( v in extraVars )
-			if( v.kind == VConst )
-				v.index += cdelta;
+		for( v in constVars ) {
+			if( v.kind != VConst ) throw "assert";
+			v.index += cdelta;
+		}
 		
 		c.tempSize = indexes[Type.enumIndex(VTmp)];
 	}
@@ -316,12 +360,12 @@ class RuntimeCompiler {
 			index : -1,
 			pos : p,
 		};
-		extraVars.push(v);
 		return v;
 	}
 	
 	function makeConst(index:Int, swiz, p) {
 		var v = allocVar("$c" + index, VConst, TFloat4, p);
+		constVars.push(v);
 		v.index = index;
 		return { d : CVar(v, swiz), t : Tools.makeFloat(swiz.length), p : p };
 	}
@@ -392,7 +436,7 @@ class RuntimeCompiler {
 		case CInt(i): i != 0;
 		case CFloat(f): f != 0;
 		case CBool(b): b;
-		case CFloats(_): true;
+		case CFloats(_), CObject(_): true;
 		};
 	}
 
@@ -722,6 +766,24 @@ class RuntimeCompiler {
 			var tmp = cur.exprs;
 			cur.exprs = exprs;
 			return { d : CSubBlock(tmp, compileValue(v)), t : e.t, p : e.p };
+		case CField(v, f):
+			v = compileValue(v, isTarget);
+			switch( v.d ) {
+			case CVar(v, _):
+				var obj = objectVars.get(v.id);
+				if( obj == null ) {
+					obj = { v : v, fields : new Hash() };
+					objectVars.set(v.id, obj);
+				}
+				var v2 = obj.fields.get(f);
+				if( v2 == null ) {
+					v2 = allocVar("$" + v.name + "." + f, v.kind, e.t, e.p);
+					obj.fields.set(f, v2);
+				}
+				return { d : CVar(v2, null), t : v2.type, p : e.p };
+			default:
+				throw "assert";
+			}
 		default:
 			throw "assert "+Type.enumConstructor(e.d);
 		}
@@ -753,7 +815,7 @@ class RuntimeCompiler {
 		if( consts.length == values.length )
 			return allocConst(consts, p);
 		// declare a new temporary
-		var v = allocVar("$tmp" + varProps.length, VTmp, Tools.makeFloat(values.length), p);
+		var v = allocVar("$tmp" + Lambda.count(varProps), VTmp, Tools.makeFloat(values.length), p);
 		usedVars.push(v);
 		// assign expressions first
 		var old = cur.exprs;

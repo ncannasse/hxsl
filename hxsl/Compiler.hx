@@ -499,6 +499,8 @@ class Compiler {
 				if( ar.length == 0 || ar.length > 4 )
 					error("Floats must contain 1-4 values", e.p);
 				Tools.makeFloat(ar.length);
+			case CObject(_):
+				error("Literal objects are not allowed", e.p);
 			}
 			return { d : CConst(c), t : t, p : e.p };
 		case PLocal(v):
@@ -522,7 +524,7 @@ class Compiler {
 			}
 			// allow all components access on input and varying values only
 			switch( v.d ) {
-			case CVar(v, s):
+			case CVar(v, s), CField({ d : CVar(v,s) },_):
 				if( s == null && count > 0 && (v.kind == VInput || v.kind == VVar) ) count = 4;
 			default:
 			}
@@ -675,6 +677,16 @@ class Compiler {
 			ret = rold;
 			closeBlock(old);
 			return { d : v.d, t : v.t, p : e.p };
+		case PField(e1, f):
+			var e1 = compileValue(e1, isTarget, isCond);
+			switch( e1.t ) {
+			case TObject(fields):
+				for( fv in fields )
+					if( fv.name == f )
+						return { d : CField(e1, f), t : fv.t, p : e.p };
+			default:
+			}
+			return error(Tools.typeStr(e1.t) + " has no field '" + f + "'", e.p);
 		case PIf(_), PFor(_):
 			throw "assert";
 		};

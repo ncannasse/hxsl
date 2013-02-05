@@ -200,7 +200,7 @@ class AgalCompiler {
 				mov(d, t, v.t);
 				return;
 			case CVar(_), CSwiz(_), CAccess(_), CSubBlock(_):
-			case CConst(_), CVector(_), CIf(_), CFor(_), CRow(_), CCond(_): throw "assert";
+			case CConst(_), CVector(_), CIf(_), CFor(_), CRow(_), CCond(_), CField(_): throw "assert";
 			}
 		compileTo(d, e);
 	}
@@ -733,7 +733,7 @@ class AgalCompiler {
 			for( e in el )
 				compileExpr(e.e, e.v);
 			compileTo(dst,v);
-		case CConst(_), CVector(_), CIf(_), CFor(_), CRow(_), CCond(_):
+		case CConst(_), CVector(_), CIf(_), CFor(_), CRow(_), CCond(_), CField(_):
 			throw "assert";
 		}
 	}
@@ -757,7 +757,7 @@ class AgalCompiler {
 			for( e in el )
 				compileExpr(e.e, e.v);
 			return compileSrc(v);
-		case CConst(_), CVector(_), CIf(_), CFor(_), CRow(_), CCond(_): throw "assert "+Type.enumConstructor(e.d);
+		case CConst(_), CVector(_), CIf(_), CFor(_), CRow(_), CCond(_), CField(_): throw "assert "+Type.enumConstructor(e.d);
 		}
 	}
 

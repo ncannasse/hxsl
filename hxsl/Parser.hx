@@ -107,6 +107,19 @@ class Parser {
 			default:
 				error("Unknown type '" + p.name + "'", pos);
 			}
+		case TAnonymous(fields):
+			var fl = [];
+			for( f in fields ) {
+				var t = switch( f.kind ) {
+					case FVar(t, e):
+						if( e != null ) error("Default value not supported", e.pos);
+						getType(t, f.pos);
+					default:
+						error("Unsupported field declaration", f.pos);
+				}
+				fl.push( { name : f.name, t : t } );
+			}
+			return TObject(fl);
 		default:
 			error("Unsupported type", pos);
 		}
@@ -161,18 +174,10 @@ class Parser {
 			var p = e.pos;
 			for( v in vl ) {
 				if( v.type == null ) error("Missing type for variable '" + v.name + "'", p);
-				if( v.name == "input" )
-					switch( v.type ) {
-					case TAnonymous(fl):
-						for( f in fl )
-							switch( f.kind ) {
-							case FVar(t,_): globals.push(allocVar(f.name,t,VInput,p));
-							default: error("Invalid input variable type",p);
-							}
-					default: error("Invalid type for shader input : should be anonymous", p);
-					}
-				else
-					globals.push(allocVarDecl(v.name, v.type, p));
+				var v = allocVarDecl(v.name, v.type, p);
+				if( v.n == "input" && v.k == null )
+					v.k = VInput;
+				globals.push(v);
 			}
 			return;
 		case EFunction(name,f):
@@ -355,7 +360,8 @@ class Parser {
 				case 2,3: swiz.push(Y);
 				case 4,5: swiz.push(Z);
 				case 6,7: swiz.push(W);
-				default: error("Unknown field " + s, e.pos);
+				default:
+					return { v : PField(v,s), p : e.pos };
 				}
 			return { v : PSwiz(v,swiz), p : e.pos };
 		case EConst(c):

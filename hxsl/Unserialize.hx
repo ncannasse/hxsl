@@ -133,6 +133,7 @@ class Unserialize {
 			case 2: CBool(s.unserialize());
 			case 3: CFloat(s.unserialize());
 			case 4: CFloats(s.unserialize());
+			case 5: CObject(s.unserialize());
 			default:
 				throw "assert";
 			});
@@ -182,6 +183,10 @@ class Unserialize {
 			var e1 = unserializeCodeValue();
 			var e2 = unserializeCodeValue();
 			CRow(e1, e2);
+		case 13:
+			var e = unserializeCodeValue();
+			var s = s.unserialize();
+			CField(e, s);
 		default:
 			throw "assert";
 		}
