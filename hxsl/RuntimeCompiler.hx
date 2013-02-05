@@ -211,25 +211,33 @@ class RuntimeCompiler {
 				if( o == null ) throw "assert"; // not really used it seems ?
 				// only take into account the actual used registers
 				var tot = 0;
+				var fl = [];
 				for( f in fields ) {
 					var fv = o.fields.get(f.name);
 					if( fv != null ) {
 						var k = calculateUsedSize(fv, index);
-						index.i += k;
-						tot += k;
+						index.i += k.size;
+						tot += k.size;
+						fl.push({ name : f.name, t : k.v.type });
 					}
 				}
-				return tot;
+				// mute the variable in usedVars with the one with the actual fields
+				var index = Lambda.indexOf(usedVars, v);
+				if( index >= 0 ) {
+					v = { id : v.id, index : v.index, kind : v.kind, name : v.name, pos : v.pos, type : TObject(fl) };
+					usedVars[index] = v;
+				}
+				return { v : v, size : tot };
 			default:
-				return Tools.regSize(v.type);
+				return { v : v, size : Tools.regSize(v.type) };
 			}
 		}
 		
-		for( v in usedVars ) {
+		for( v in usedVars.copy() ) {
 			var p = props(v);
 			if( p.isVertex == c.vertex ) {
 				var tkind = Type.enumIndex(v.kind);
-				var size = calculateUsedSize(v,{ i : indexes[tkind] });
+				var size = calculateUsedSize(v,{ i : indexes[tkind] }).size;
 				indexes[tkind] += size;
 				switch( v.kind ) {
 				case VConst, VTexture:
@@ -317,9 +325,14 @@ class RuntimeCompiler {
 							e.v.d = CVar(vn);
 							// remove swizzle on read
 							if( isGoodSwiz(sv2) ) {
-								var vn2 = Reflect.copy(v2);
-								props(v2).ref = vn2;
-								vn2.type = TFloat4;
+								var p = props(v2);
+								var vn2 = p.ref;
+								// allow several writes
+								if( vn2 == null ) {
+									vn2 = Reflect.copy(v2);
+									vn2.type = TFloat4;
+									p.ref = vn2;
+								}
 								e.e.d = CVar(vn2);
 							} else
 							// or pad swizzle on input var

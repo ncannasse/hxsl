@@ -187,18 +187,27 @@ class ShaderGlobals {
 		for( v in data2.globals )
 			switch( v.kind ) {
 			case VInput:
-				var size = Tools.floatSize(v.type);
-				switch( v.type ) {
-				case TInt:
-					// bufferFormat 0
-					size = 1; // takes space of one float in buffer
-				case TFloat, TFloat2, TFloat3, TFloat4:
-					i.bufferFormat |= Tools.floatSize(v.type) << (3 * v.index);
-				default:
-					throw "Type not supported in input " + Type.enumConstructor(v.type).substr(1);
+				function loop(name,t:VarType,index:Int) {
+					var size = Tools.floatSize(t);
+					switch( t ) {
+					case TInt:
+						// bufferFormat 0
+						size = 1; // takes space of one float in buffer
+					case TFloat, TFloat2, TFloat3, TFloat4:
+						i.bufferFormat |= Tools.floatSize(t) << (3 * index);
+					case TObject(fields):
+						var tot = 0;
+						for( f in fields )
+							tot += loop(f.name, f.t, index++);
+						return tot;
+					default:
+						throw "Type not supported in input " + Type.enumConstructor(t).substr(1);
+					}
+					i.bufferNames.push(name);
+					i.stride += size;
+					return size;
 				}
-				i.bufferNames.push(v.name);
-				i.stride += size;
+				loop(v.name, v.type, v.index);
 			case VVar:
 				// ignore
 			default:
