@@ -29,13 +29,13 @@ class Parser {
 
 	var vertex : Function;
 	var fragment : Function;
-	var helpers : Hash<Function>;
+	var helpers : Map<String,Function>;
 	var globals : Array<ParsedVar>;
 	var cur : ParsedCode;
 	var allowReturn : Bool;
 
 	public function new() {
-		helpers = new Hash();
+		helpers = new Map();
 		globals = [];
 	}
 
@@ -57,7 +57,7 @@ class Parser {
 		allowReturn = false;
 		var vs = buildShader(vertex);
 		var fs = buildShader(fragment);
-		var help = new Hash();
+		var help = new Map();
 		allowReturn = true;
 		for( h in helpers.keys() )
 			help.set(h, buildShader(helpers.get(h)));
@@ -86,6 +86,8 @@ class Parser {
 						}
 					default:
 					}
+				case TPType(t) if( p.pack.length == 0 && p.name == "Array" && p.sub == null ):
+					return TArray(getType(t, pos), 0); // 0 length is for runtime constant
 				default:
 				}
 			}
@@ -107,6 +109,19 @@ class Parser {
 			default:
 				error("Unknown type '" + p.name + "'", pos);
 			}
+		case TAnonymous(fields):
+			var fl = [];
+			for( f in fields ) {
+				var t = switch( f.kind ) {
+					case FVar(t, e):
+						if( e != null ) error("Default value not supported", e.pos);
+						getType(t, f.pos);
+					default:
+						error("Unsupported field declaration", f.pos);
+				}
+				fl.push( { name : f.name, t : t } );
+			}
+			return TObject(fl);
 		default:
 			error("Unsupported type", pos);
 		}
@@ -117,7 +132,7 @@ class Parser {
 		if( t != null )
 			switch( t ) {
 			case TPath(path):
-				if ( path.params.length == 1 ) {
+				if( path.params.length == 1 && path.name != "Array" ) {
 					switch (path.params[0]) {
 					case TPType(tt):
 						var v = allocVar(v, tt, getKindFromName(path.name, p), p);
@@ -161,18 +176,10 @@ class Parser {
 			var p = e.pos;
 			for( v in vl ) {
 				if( v.type == null ) error("Missing type for variable '" + v.name + "'", p);
-				if( v.name == "input" )
-					switch( v.type ) {
-					case TAnonymous(fl):
-						for( f in fl )
-							switch( f.kind ) {
-							case FVar(t,_): globals.push(allocVar(f.name,t,VInput,p));
-							default: error("Invalid input variable type",p);
-							}
-					default: error("Invalid type for shader input : should be anonymous", p);
-					}
-				else
-					globals.push(allocVarDecl(v.name, v.type, p));
+				var v = allocVarDecl(v.name, v.type, p);
+				if( v.n == "input" && v.k == null )
+					v.k = VInput;
+				globals.push(v);
 			}
 			return;
 		case EFunction(name,f):
@@ -303,7 +310,7 @@ class Parser {
 			}
 			error("Unsupported call", e.pos);
 		case EFor(it, expr):
-			var min = null, max = null, vname = null;
+			var iter = null, vname = null;
 			switch( it.expr ) {
 			case EIn(v,it):
 				switch( v.expr ) {
@@ -314,25 +321,18 @@ class Parser {
 					}
 				default:
 				}
-				switch( it.expr ) {
-				case EBinop(op, e1, e2):
-					if( op == OpInterval ) {
-						min = parseValue(e1);
-						max = parseValue(e2);
-					}
-				default:
-				}
+				iter = parseValue(it);
 			default:
 			}
-			if( min == null || max == null || vname == null )
-				error("For iterator should be in the form x...y", it.pos);
+			if( vname == null )
+				error("For should be in the form for( x in it )", it.pos);
 
 			var old = cur.exprs;
 			cur.exprs = [];
 			parseExpr(expr);
 			var pexpr = { v : PBlock(cur.exprs), p : expr.pos };
 			cur.exprs = old;
-			cur.exprs.push( {v : null, e:{v:PFor(vname, min, max, pexpr), p:e.pos}, p:e.pos } );
+			cur.exprs.push( {v : null, e:{v:PFor(vname, iter, pexpr), p:e.pos}, p:e.pos } );
 		case EReturn(r):
 			if( r == null ) error("Return must return a value", e.pos);
 			if( !allowReturn ) error("Return only allowed as final expression in helper methods", e.pos);
@@ -355,7 +355,8 @@ class Parser {
 				case 2,3: swiz.push(Y);
 				case 4,5: swiz.push(Z);
 				case 6,7: swiz.push(W);
-				default: error("Unknown field " + s, e.pos);
+				default:
+					return { v : PField(v,s), p : e.pos };
 				}
 			return { v : PSwiz(v,swiz), p : e.pos };
 		case EConst(c):

@@ -74,6 +74,7 @@ enum VarType {
 	TMatrix( r : Int, c : Int, transpose : { t : Null<Bool> } );
 	TTexture( cube : Bool );
 	TArray( t : VarType, size : Int );
+	TObject( fields : Array<{ name : String, t : VarType }> );
 }
 
 typedef Variable = {
@@ -105,6 +106,7 @@ enum CodeOp {
 	// Internal usage only
 	CAnd;
 	COr;
+	CInterval;
 }
 
 enum CodeUnop {
@@ -136,6 +138,8 @@ enum Const {
 	CBool( b : Bool );
 	CFloat( v : Float );
 	CFloats( v : Array<Float> );
+	CObject( fields : Map<String,Const> );
+	CArray( v : Array<Const> );
 }
 
 enum CodeValueDecl {
@@ -150,9 +154,10 @@ enum CodeValueDecl {
 	CConst( c : Const );
 	CIf( cond : CodeValue, eif : CodeBlock, eelse : Null<CodeBlock> );
 	CCond( cond : CodeValue, eif : CodeValue, eelse : CodeValue );
-	CFor( iterator : Variable, start : CodeValue, end : CodeValue, exprs : CodeBlock );
+	CFor( v : Variable, it : CodeValue, exprs : CodeBlock );
 	CVector( vals : Array<CodeValue> );
 	CRow( e1 : CodeValue, e2 : CodeValue );
+	CField( e : CodeValue, f : String );
 }
 
 typedef CodeBlock = Array<{ v: Null<CodeValue>, e:CodeValue }>;
@@ -194,13 +199,14 @@ enum ParsedValueDecl {
 	PTex( v : String, acc : ParsedValue, mode : Array<{ f : ParsedTexFlag, p : Position }> );
 	PSwiz( e : ParsedValue, swiz : Array<Comp> );
 	PIf( cond : ParsedValue, eif : ParsedValue, eelse : ParsedValue );
-	PFor( it : String, first : ParsedValue, last : ParsedValue, expr:ParsedValue );
+	PFor( v : String, iter : ParsedValue, expr:ParsedValue );
 	PCond( cond : ParsedValue, eif : ParsedValue, eelse : ParsedValue ); // inline if statement
 	PVector( el : Array<ParsedValue> );
 	PRow( e : ParsedValue, index : ParsedValue );
 	PBlock( el : Array<ParsedExpr> );
 	PReturn( e : ParsedValue );
 	PCall( n : String, vl : Array<ParsedValue> );
+	PField( e : ParsedValue, field : String );
 }
 
 enum ParsedTexFlag {
@@ -237,7 +243,7 @@ typedef ParsedHxsl = {
 	var globals : Array<ParsedVar>;
 	var vertex : ParsedCode;
 	var fragment : ParsedCode;
-	var helpers : Hash<ParsedCode>;
+	var helpers : Map<String,ParsedCode>;
 }
 
 typedef Error = haxe.macro.Expr.Error;
@@ -270,7 +276,9 @@ class Tools {
 		case TTexture(cube):
 			return cube ? "CubeTexture" : "Texture";
 		case TArray(t, size):
-			return typeStr(t) + "<" + size + ">";
+			return size == 0 ? "Array<" + typeStr(t)+">" : typeStr(t) + "<" + size + ">";
+		case TObject(fields):
+			return "{" + [for( f in fields ) f.name + " : " + typeStr(f.t)].join(", ") + "}";
 		default:
 			return Std.string(t).substr(1);
 		}
@@ -287,6 +295,11 @@ class Tools {
 				t.t ? w : h;
 		case TArray(t, size):
 			regSize(t) * size;
+		case TObject(fields):
+			var k = 0;
+			for( f in fields )
+				k += regSize(f.t);
+			k;
 		default:
 			1;
 		}
@@ -306,6 +319,8 @@ class Tools {
 			var size = floatSize(t);
 			if( size < 4 ) size = 4;
 			size * count;
+		case TObject(_):
+			regSize(t) * 4;
 		}
 	}
 

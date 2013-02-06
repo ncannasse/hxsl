@@ -48,9 +48,10 @@ private typedef VarProps = {
 **/
 class RuntimeCompiler {
 	
-	var varProps : Array<VarProps>;
+	var varProps : Map<Int,VarProps>;
 	var usedVars : Array<Variable>;
-	var extraVars : Array<Variable>;
+	var constVars : Array<Variable>;
+	var objectVars : Map<Int,{ v : Variable, fields : Map<String,Variable> }>;
 	var varId : Int;
 	
 	// force replace of variables by their provided value
@@ -76,7 +77,7 @@ class RuntimeCompiler {
 	}
 	
 	function props( v : Variable ) {
-		var p = varProps[v.id];
+		var p = varProps.get(v.id);
 		if( p == null ) {
 			p = {
 				global : false,
@@ -87,7 +88,7 @@ class RuntimeCompiler {
 				isVertex : false,
 				ref : null,
 			}
-			varProps[v.id] = p;
+			varProps.set(v.id,p);
 		}
 		return p;
 	}
@@ -99,13 +100,14 @@ class RuntimeCompiler {
 			* true/false for Bool
 			* an Int base index in the paramsData table for all other types
 	**/
-	public function compile( data : Data, ?params : { }, ?paramsData : #if flash flash.Vector #else Array #end<Float> ) : Data {
+	public function compile( data : Data, ?params : { }, ?paramsData : haxe.ds.Vector<Float> ) : Data {
 		usedVars = [];
-		varProps = [];
-		extraVars = [];
+		constVars = [];
+		varProps = new Map();
+		objectVars = new Map();
 		defPos = data.vertex.pos;
 			
-		var hVars = new Hash();
+		var hVars = new Map();
 		for( v in data.globals.concat(data.vertex.args).concat(data.fragment.args) )
 			switch( v.kind ) {
 			case VConst, VParam:
@@ -122,43 +124,63 @@ class RuntimeCompiler {
 				var val : Dynamic = Reflect.field(params, f);
 				if( val == null )
 					continue;
-				switch( v.type ) {
-				case TNull, TTexture(_): throw "assert";
-				case TBool:
-					if( !Std.is(val, Bool) )
-						error("Invalid value for parameter " + v.name, null);
-					props(v).value = CBool(val);
-				case TFloat:
-					if( !Std.is(val, Float) )
-						error("Invalid value for parameter " + v.name, null);
-					props(v).value = CFloat(val);
-				case TInt, TFloat2, TFloat3, TFloat4, TMatrix(_), TArray(_):
-					if( !Std.is(val, Int) )
-						error("Invalid value for parameter " + v.name, null);
-					var index : Int = val;
-					var size = Tools.floatSize(v.type);
-					var a = [];
-					for( i in 0...size ) {
-						var v = paramsData == null ? 0 : paramsData[i + index];
-						#if !flash if( v == null ) v = 0; #end
-						a.push(v);
+				function makeVal(val:Dynamic, t:VarType) {
+					if( val == null )
+						return CNull;
+					switch( t ) {
+					case TNull, TTexture(_): throw "assert";
+					case TBool:
+						if( !Std.is(val, Bool) )
+							error("Invalid value for parameter " + v.name, null);
+						return CBool(val);
+					case TFloat:
+						if( !Std.is(val, Float) )
+							error("Invalid value for parameter " + v.name, null);
+						return CFloat(val);
+					case TArray(t, 0):
+						if( !Std.is(val, Array) )
+							error("Invalid value for parameter " + v.name, null);
+						var a : Array<Dynamic> = val;
+						return CArray([for( v in a ) makeVal(v, t)]);
+					case TInt, TFloat2, TFloat3, TFloat4, TMatrix(_), TArray(_):
+						if( !Std.is(val, Int) )
+							error("Invalid value for parameter " + v.name, null);
+						var index : Int = val;
+						var size = Tools.floatSize(v.type);
+						var a = [];
+						for( i in 0...size ) {
+							var v = paramsData == null ? 0 : paramsData[i + index];
+							#if !flash if( v == null ) v = 0; #end
+							a.push(v);
+						}
+						return a.length == 1 ? CFloat(a[0]) : CFloats(a);
+					case TObject(fields):
+						if( !Reflect.isObject(val) )
+							error("Invalid value for parameter " + v.name, null);
+						var obj = new Map();
+						for( f in fields ) {
+							var fv = Reflect.field(val, f.name);
+							if( fv != null )
+								obj.set(f.name, makeVal(fv, f.t));
+						}
+						return CObject(obj);
 					}
-					props(v).value = a.length == 1 ? CFloat(a[0]) : CFloats(a);
 				}
+				props(v).value = makeVal(val, v.type);
 			}
 		
 		var vertex = compileCode(data.vertex);
-		var vextra = extraVars;
-		extraVars = [];
+		var vconst = constVars;
+		constVars = [];
 		
 		var fragment = compileCode(data.fragment);
-		var fextra = extraVars;
-		extraVars = [];
+		var fconst = constVars;
+		constVars = [];
 		
 		usedVars.sort(sortById);
 		
-		indexVars(vertex, vextra);
-		indexVars(fragment, fextra);
+		indexVars(vertex, vconst);
+		indexVars(fragment, fconst);
 		
 		var globals = [];
 		for( v in usedVars ) {
@@ -178,16 +200,59 @@ class RuntimeCompiler {
 		return s != null && s.length > 1 && (s[0] != X || s[1] != Y || (s.length > 2 && (s[2] != Z || (s.length > 3 && s[3] != W))));
 	}
 	
-	function indexVars( c : Code, extraVars : Array<Variable> ) {
+	function indexVars( c : Code, constVars : Array<Variable> ) {
 		var indexes = [0, 0, 0, 0, 0, 0];
-		for( v in usedVars ) {
+
+		function calculateUsedSize( v : Variable, index : { i : Int } ) : { v : Variable, size : Int } {
+			v.index = index.i;
+			var p = props(v);
+			if( p.ref != null ) p.ref.index = v.index;
+			
+			switch( v.type ) {
+			case TObject(fields):
+				var o = objectVars.get(v.id);
+				if( o == null ) throw "assert"; // not really used it seems ?
+				// only take into account the actual used registers
+				var tot = 0;
+				var fl = [];
+				for( f in fields ) {
+					var fv = o.fields.get(f.name);
+					if( fv != null ) {
+						var k = calculateUsedSize(fv, index);
+						tot += k.size;
+						fl.push({ name : f.name, t : k.v.type });
+					}
+				}
+				// mute the variable in usedVars with the one with the actual fields
+				var index = Lambda.indexOf(usedVars, v);
+				if( index >= 0 ) {
+					v = { id : v.id, index : v.index, kind : v.kind, name : v.name, pos : v.pos, type : TObject(fl) };
+					usedVars[index] = v;
+				}
+				return { v : v, size : tot };
+			case TArray(_, size) if( objectVars.exists(v.id) ):
+				var o = objectVars.get(v.id);
+				var tot = 0;
+				for( i in 0...size ) {
+					var fv = o.fields.get(""+i);
+					var k = calculateUsedSize(fv, index);
+					tot += k.size;
+				}
+				return { v : v, size : tot };
+			default:
+				var size = Tools.regSize(v.type);
+				index.i += size;
+				return { v : v, size : size };
+			}
+		}
+		
+		for( v in usedVars.copy() ) {
 			var p = props(v);
 			if( p.isVertex == c.vertex ) {
 				var tkind = Type.enumIndex(v.kind);
-				var size = Tools.regSize(v.type);
-				v.index = indexes[tkind];
-				if( p.ref != null ) p.ref.index = v.index;
-				indexes[tkind] += size;
+				var inf = calculateUsedSize(v, { i : indexes[tkind] } );
+				var v = inf.v;
+				indexes[tkind] += inf.size;
 				switch( v.kind ) {
 				case VConst, VTexture:
 					c.args.push(v);
@@ -200,9 +265,10 @@ class RuntimeCompiler {
 		}
 		// move consts at the end
 		var cdelta = indexes[Type.enumIndex(VConst)];
-		for( v in extraVars )
-			if( v.kind == VConst )
-				v.index += cdelta;
+		for( v in constVars ) {
+			if( v.kind != VConst ) throw "assert";
+			v.index += cdelta;
+		}
 		
 		c.tempSize = indexes[Type.enumIndex(VTmp)];
 	}
@@ -273,9 +339,14 @@ class RuntimeCompiler {
 							e.v.d = CVar(vn);
 							// remove swizzle on read
 							if( isGoodSwiz(sv2) ) {
-								var vn2 = Reflect.copy(v2);
-								props(v2).ref = vn2;
-								vn2.type = TFloat4;
+								var p = props(v2);
+								var vn2 = p.ref;
+								// allow several writes
+								if( vn2 == null ) {
+									vn2 = Reflect.copy(v2);
+									vn2.type = TFloat4;
+									p.ref = vn2;
+								}
 								e.e.d = CVar(vn2);
 							} else
 							// or pad swizzle on input var
@@ -316,12 +387,12 @@ class RuntimeCompiler {
 			index : -1,
 			pos : p,
 		};
-		extraVars.push(v);
 		return v;
 	}
 	
 	function makeConst(index:Int, swiz, p) {
 		var v = allocVar("$c" + index, VConst, TFloat4, p);
+		constVars.push(v);
 		v.index = index;
 		return { d : CVar(v, swiz), t : Tools.makeFloat(swiz.length), p : p };
 	}
@@ -392,7 +463,7 @@ class RuntimeCompiler {
 		case CInt(i): i != 0;
 		case CFloat(f): f != 0;
 		case CBool(b): b;
-		case CFloats(_): true;
+		case CFloats(_), CObject(_), CArray(_): true;
 		};
 	}
 
@@ -419,8 +490,50 @@ class RuntimeCompiler {
 					compileAssign(e.v, e.e);
 			}
 			return;
-		case CFor(_):
-			throw "TODO";
+		case CFor(vloop, it, exprs):
+			switch( it.d ) {
+			case COp(CInterval, _first, _max):
+				throw "TODO";
+			default:
+				var vit = compileValue(it);
+				switch( vit.d ) {
+				case CVar(v,_):
+					switch( v.type ) {
+					case TArray(t, size):
+						var v = newVar(v, v.pos);
+						var values = [];
+						if( size == 0 ) {
+							size = switch( compileCond(it) ) {
+							case CArray(vl): values = vl; vl.length;
+							case CNull: 0;
+							default: throw "assert";
+							}
+							v.type = TArray(t, size);
+						}
+						var obj = objectVars.get(v.id);
+						if( obj == null ) {
+							obj = { v : v, fields : new Map() };
+							objectVars.set(v.id, obj);
+						}
+						var p = props(vloop);
+						for( i in 0...size ) {
+							var vi = allocVar("$" + v.name + "#" + i, VConst, t, e.p);
+							vi.index = i;
+							obj.fields.set("" + i, vi);
+							p.newVar = vi;
+							p.value = props(vi).value = values[i];
+							for( e in exprs )
+								compileAssign(e.v, e.e);
+						}
+						return;
+					default:
+						throw "assert";
+					}
+				default:
+					throw "assert";
+				}
+			}
+			return;
 		case CUnop(op, _):
 			switch( op ) {
 			case CKill:
@@ -573,6 +686,7 @@ class RuntimeCompiler {
 			case CMin: return const(function(a, b) return a < b ? a : b);
 			case CMax: return const(function(a, b) return a > b ? a : b);
 			case CCross:
+			case CInterval: throw "assert";
 			}
 		}
 		// force const building
@@ -722,6 +836,39 @@ class RuntimeCompiler {
 			var tmp = cur.exprs;
 			cur.exprs = exprs;
 			return { d : CSubBlock(tmp, compileValue(v)), t : e.t, p : e.p };
+		case CField(v, f):
+			v = compileValue(v, isTarget);
+			switch( v.d ) {
+			case CVar(v, _):
+				var obj = objectVars.get(v.id);
+				if( obj == null ) {
+					obj = { v : v, fields : new Map() };
+					objectVars.set(v.id, obj);
+				}
+				var v2 = obj.fields.get(f);
+				if( v2 == null ) {
+					v2 = allocVar("$" + v.name + "." + f, v.kind, e.t, e.p);
+					obj.fields.set(f, v2);
+				}
+				return { d : CVar(v2, null), t : v2.type, p : e.p };
+			case CConst(CNull):
+				return v;
+			case CConst(CObject(fl)):
+				var val = fl.get(f);
+				var ft = TNull;
+				switch( v.t ) {
+				case TObject(fl):
+					for( fi in fl )
+						if( fi.name == f ) {
+							ft = fi.t;
+							break;
+						}
+				default:
+				}
+				return v == null ? { d : CConst(CNull), t : TNull, p : e.p } : { d : CConst(val), t : ft, p : e.p };
+			default:
+				throw "assert";
+			}
 		default:
 			throw "assert "+Type.enumConstructor(e.d);
 		}
@@ -753,7 +900,7 @@ class RuntimeCompiler {
 		if( consts.length == values.length )
 			return allocConst(consts, p);
 		// declare a new temporary
-		var v = allocVar("$tmp" + varProps.length, VTmp, Tools.makeFloat(values.length), p);
+		var v = allocVar("$tmp" + Lambda.count(varProps), VTmp, Tools.makeFloat(values.length), p);
 		usedVars.push(v);
 		// assign expressions first
 		var old = cur.exprs;

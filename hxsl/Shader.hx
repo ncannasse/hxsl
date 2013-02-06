@@ -24,6 +24,7 @@
 package hxsl;
 
 import hxsl.Data;
+import haxe.ds.Vector;
 
 /**
 	A ShaderInstance is a compiled version of a shader for a given set of parameters.
@@ -31,6 +32,7 @@ import hxsl.Data;
 class ShaderInstance {
 
 	public var bits : Int;
+	public var lengths : Array<Array<Int>>;
 	
 	public var program : flash.display3D.Program3D;
 
@@ -38,14 +40,14 @@ class ShaderInstance {
 	public var bufferNames : Array<String>;
 	public var stride : Int;
 
-	public var vertexVars : flash.Vector<Float>;
-	public var fragmentVars : flash.Vector<Float>;
-	public var textures : flash.Vector<ShaderTypes.Texture>;
+	public var vertexVars : Vector<Float>;
+	public var fragmentVars : Vector<Float>;
+	public var textures : Vector<ShaderTypes.Texture>;
 	public var curShaderId : Int;
 
-	public var vertexMap : flash.Vector<Int>;
-	public var fragmentMap : flash.Vector<Int>;
-	public var textureMap : flash.Vector<Int>;
+	public var vertexMap : Vector<Int>;
+	public var fragmentMap : Vector<Int>;
+	public var textureMap : Vector<Int>;
 	
 	public var vertexBytes : haxe.io.Bytes;
 	public var fragmentBytes : haxe.io.Bytes;
@@ -68,23 +70,39 @@ class ShaderGlobals {
 	public var texSize : Int;
 	public var hasParamVector : Bool;
 	public var hasParamMatrix : Bool;
+	public var hasParamObject : Bool;
+	public var hasParamLengths : Bool;
 
 	var constCount : Int;
-	var instances : IntHash<ShaderInstance>;
-	var hparams : IntHash<hxsl.Data.Variable>;
+	var instances : Map<String,ShaderInstance>;
+	var hparams : Map<Int,hxsl.Data.Variable>;
 	
 	public function new( hxStr : String ) {
 		this.data = hxsl.Unserialize.unserialize(hxStr);
+
+		function checkSubType(t:Data.VarType) {
+			switch( t ) {
+			case TNull, TFloat, TBool, TInt, TTexture(_),TFloat2, TFloat3, TFloat4, TMatrix(_):
+			case TArray(t, 0): hasParamLengths = true; checkSubType(t);
+			case TObject(fields):
+				for( f in fields )
+					checkSubType(f.t);
+			}
+		}
 		
 		function checkType(t:Data.VarType) {
 			switch( t ) {
 			case TNull, TFloat, TBool, TInt, TTexture(_):
 			case TFloat2, TFloat3, TFloat4: hasParamVector = true;
-			case TArray(t, _): checkType(t);
+			case TArray(_): throw "assert";
 			case TMatrix(_): hasParamMatrix = true;
+			case TObject(fields):
+				hasParamObject = true;
+				for( f in fields )
+					checkSubType(f.t);
 			}
 		}
-		hparams = new IntHash();
+		hparams = new Map();
 		for( v in Tools.getAllVars(data) )
 			switch( v.kind ) {
 			case VParam:
@@ -100,14 +118,14 @@ class ShaderGlobals {
 			default:
 			}
 		
-		instances = new IntHash();
+		instances = new Map();
 	}
 	
 	function build( code : hxsl.Data.Code ) {
 			
 		// init map
 		var nregs = 0;
-		var map = new flash.Vector(constCount);
+		var map = new Vector(constCount);
 		for( i in 0...constCount )
 			map[i] = -1;
 			
@@ -122,7 +140,7 @@ class ShaderGlobals {
 		// add consts
 		var pos = nregs * 4;
 		nregs += code.consts.length;
-		var consts = new flash.Vector(nregs * 4);
+		var consts = new Vector(nregs * 4);
 		for( c in code.consts ) {
 			for( v in c )
 				consts[pos++] = v;
@@ -136,30 +154,46 @@ class ShaderGlobals {
 		return { bytes : o.getBytes(), consts : consts, map : map };
 	}
 
-	public function compileShader( bits ) {
+	public function compileShader( bits, lengths : Array<Array<Int>> ) {
 		var r = new hxsl.RuntimeCompiler();
 		var params = { };
 		var paramCount = 0;
 		for( v in Tools.getAllVars(data) )
 			if( v.kind == VParam ) {
 				if( bits & (1 << paramCount) != 0 ) {
-					var c : Dynamic;
-					if( v.type == TBool ) c = true else c = 0;
-					Reflect.setField(params, v.name, c);
+					var len = lengths == null ? null : lengths[paramCount];
+					var lenPos = 0;
+					function loop(t) : Dynamic {
+						switch( t ) {
+						case TBool: return true;
+						case TArray(t, 0):
+							return [for( i in 0...len[lenPos++] ) loop(t)];
+						case TObject(fl):
+							var o = { };
+							for( f in fl )
+								Reflect.setField(o, f.name, loop(f.t));
+							return o;
+						default:
+							return 0;
+						}
+					}
+					Reflect.setField(params, v.name, loop(v.type));
 				}
 				paramCount++;
 			}
 		return r.compile(data, params);
 	}
 	
-	public function getInstance( bits : Int ) {
-		var i = instances.get(bits);
+	public function getInstance( bits : Int, lengths : Array<Array<Int>> ) {
+		var signature = bits + ":" + lengths;
+		var i = instances.get(signature);
 		if( i != null )
 			return i;
-		var data2 = compileShader(bits);
+		var data2 = compileShader(bits, lengths);
 		
 		i = new ShaderInstance();
 		i.bits = bits;
+		i.lengths = lengths == null ? null : lengths.copy();
 		
 		var v = build(data2.vertex);
 		i.vertexBytes = v.bytes;
@@ -171,13 +205,14 @@ class ShaderGlobals {
 		i.fragmentMap = f.map;
 		i.fragmentVars = f.consts;
 				
-		i.textureMap = new flash.Vector();
+		var tmap = new Array();
 		for( v in data2.vertex.args.concat(data2.fragment.args) )
 			if( v.kind == VTexture ) {
 				var realV = hparams.get(v.id);
-				i.textureMap.push(realV.index);
+				tmap.push(realV.index);
 			}
-		i.textures = new flash.Vector(i.textureMap.length);
+		i.textureMap = Vector.fromArrayCopy(tmap);
+		i.textures = new Vector(i.textureMap.length());
 		
 		i.bufferFormat = 0;
 		i.bufferNames = [];
@@ -185,25 +220,34 @@ class ShaderGlobals {
 		for( v in data2.globals )
 			switch( v.kind ) {
 			case VInput:
-				var size = Tools.floatSize(v.type);
-				switch( v.type ) {
-				case TInt:
-					// bufferFormat 0
-					size = 1; // takes space of one float in buffer
-				case TFloat, TFloat2, TFloat3, TFloat4:
-					i.bufferFormat |= Tools.floatSize(v.type) << (3 * v.index);
-				default:
-					throw "Type not supported in input " + Type.enumConstructor(v.type).substr(1);
+				function loop(name,t:VarType,index:Int) {
+					var size = Tools.floatSize(t);
+					switch( t ) {
+					case TInt:
+						// bufferFormat 0
+						size = 1; // takes space of one float in buffer
+					case TFloat, TFloat2, TFloat3, TFloat4:
+						i.bufferFormat |= Tools.floatSize(t) << (3 * index);
+					case TObject(fields):
+						var tot = 0;
+						for( f in fields )
+							tot += loop(f.name, f.t, index++);
+						return tot;
+					default:
+						throw "Type not supported in input " + Type.enumConstructor(t).substr(1);
+					}
+					i.bufferNames.push(name);
+					i.stride += size;
+					return size;
 				}
-				i.bufferNames.push(v.name);
-				i.stride += size;
+				loop(v.name, v.type, v.index);
 			case VVar:
 				// ignore
 			default:
 				throw "assert " + v.kind;
 			}
 
-		instances.set(bits, i);
+		instances.set(signature, i);
 		
 		return i;
 	}
@@ -225,8 +269,10 @@ class Shader {
 	var globals : ShaderGlobals;
 	var modified : Bool;
 	var paramBits : Int;
+	var paramLengths : Array<Array<Int>>;
 	var paramVectors : Array<ShaderTypes.Vector>;
 	var paramMatrixes : Array<ShaderTypes.Matrix>;
+	var paramObjects : Array<Dynamic>;
 	var allTextures : Array<ShaderTypes.Texture>;
 	var instance : ShaderInstance;
 	
@@ -240,6 +286,8 @@ class Shader {
 		if( globals.texSize > 0 ) allTextures = [];
 		if( globals.hasParamVector ) paramVectors = [];
 		if( globals.hasParamMatrix ) paramMatrixes = [];
+		if( globals.hasParamObject ) paramObjects = [];
+		if( globals.hasParamLengths ) paramLengths = [];
 		shaderId = ID++;
 	}
 	
@@ -258,8 +306,8 @@ class Shader {
 	}
 
 	public function getInstance() : ShaderInstance {
-		if( instance == null || instance.bits != paramBits )
-			instance = globals.getInstance(paramBits);
+		if( instance == null || instance.bits != paramBits || (instance.lengths != null && Std.string(instance.lengths) != Std.string(paramLengths)) )
+			instance = globals.getInstance(paramBits, paramLengths);
 		if( modified || instance.curShaderId != shaderId ) {
 			updateParams();
 			modified = false;
@@ -279,7 +327,7 @@ class Shader {
 
 	#if debug
 	public function getDebugShaderCode( bytecode = false ) {
-		var data = globals.compileShader(paramBits);
+		var data = globals.compileShader(paramBits,paramLengths);
 		if( !bytecode )
 			return hxsl.Debug.dataStr(data);
 		function getCode(c) {
@@ -307,10 +355,10 @@ class Shader {
 			i.program.upload(vdata,fdata);
 		}
 		ctx.setProgram(i.program);
-		ctx.setProgramConstantsFromVector(flash.display3D.Context3DProgramType.VERTEX, 0, i.vertexVars);
-		ctx.setProgramConstantsFromVector(flash.display3D.Context3DProgramType.FRAGMENT, 0, i.fragmentVars);
-		for( k in 0...i.textures.length )
-			ctx.setTextureAt(k, i.textures[k]);
+		ctx.setProgramConstantsFromVector(flash.display3D.Context3DProgramType.VERTEX, 0, i.vertexVars.toData());
+		ctx.setProgramConstantsFromVector(flash.display3D.Context3DProgramType.FRAGMENT, 0, i.fragmentVars.toData());
+		for( k in 0...i.textures.length() )
+			ctx.setTextureAt(k, i.textures.get(k));
 		var FORMAT = [
 			flash.display3D.Context3DVertexBufferFormat.BYTES_4,
 			flash.display3D.Context3DVertexBufferFormat.FLOAT_1,
@@ -332,7 +380,7 @@ class Shader {
 		var i = instance;
 		if( i == null )
 			return;
-		for( k in 0...i.textures.length )
+		for( k in 0...i.textures.length() )
 			ctx.setTextureAt(k, null);
 		var pos = 0, offset = 0;
 		var bits = i.bufferFormat;
@@ -350,19 +398,19 @@ class Shader {
 		// copy vars from our local shader to the instance
 		updateVertexParams(instance.vertexVars, instance.vertexMap);
 		updateFragmentParams(instance.fragmentVars, instance.fragmentMap);
-		for( i in 0...instance.textureMap.length )
-			instance.textures[i] = allTextures[instance.textureMap[i]];
+		for( i in 0...instance.textureMap.length() )
+			instance.textures.set(i,allTextures[instance.textureMap.get(i)]);
 		instance.curShaderId = shaderId;
 		instance.varsChanged = true;
 	}
 	
-	function updateVertexParams( params : flash.Vector<Float>, map : flash.Vector<Int> ) {
+	function updateVertexParams( params : Vector<Float>, map : Vector<Int> ) {
 	}
 
-	function updateFragmentParams( params : flash.Vector<Float>, map : flash.Vector<Int> ) {
+	function updateFragmentParams( params : Vector<Float>, map : Vector<Int> ) {
 	}
 	
-	inline function saveFloats( params : flash.Vector<Float>, index : Int, v : ShaderTypes.Vector, n : Int ) {
+	inline function saveFloats( params : Vector<Float>, index : Int, v : ShaderTypes.Vector, n : Int ) {
 		if( index >= 0 ) {
 			params[index] = v.x;
 			params[index + 1] = v.y;
@@ -371,7 +419,7 @@ class Shader {
 		}
 	}
 	
-	inline function saveInt( params : flash.Vector<Float>, index : Int, v : Int ) {
+	inline function saveInt( params : Vector<Float>, index : Int, v : Int ) {
 		if( index >= 0 ) {
 			params[index] = ((v >> 16) & 0xFF) / 255;
 			params[index + 1] = ((v >> 8) & 0xFF) / 255;
@@ -380,11 +428,11 @@ class Shader {
 		}
 	}
 	
-	inline function saveFloat( params : flash.Vector<Float>, index : Int, v : Float ) {
+	inline function saveFloat( params : Vector<Float>, index : Int, v : Float ) {
 		if( index >= 0 ) params[index] = v;
 	}
 
-	inline function saveMatrix( params : flash.Vector<Float>, index : Int, m : ShaderTypes.Matrix, r : Int, c : Int ) {
+	inline function saveMatrix( params : Vector<Float>, index : Int, m : ShaderTypes.Matrix, r : Int, c : Int ) {
 		if( index >= 0 ) {
 			#if h3d
 			params[index++] = m._11;
@@ -443,7 +491,7 @@ class Shader {
 		}
 	}
 
-	inline function saveMatrixT( params : flash.Vector<Float>, index : Int, m : ShaderTypes.Matrix, r : Int, c : Int ) {
+	inline function saveMatrixT( params : Vector<Float>, index : Int, m : ShaderTypes.Matrix, r : Int, c : Int ) {
 		if( index >= 0 ) {
 			#if h3d
 			params[index++] = m._11;

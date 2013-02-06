@@ -55,7 +55,7 @@ class Debug {
 		}
 		lines.push("code:");
 		for( e in c.exprs )
-			lines.push("\t" + exprStr(e.v, e.e));
+			lines.push("\t" + exprStr(e.v, e.e).split("\t").join("\t\t"));
 		return lines.join("\n");
 	}
 	
@@ -65,18 +65,24 @@ class Debug {
 		return valueStr(v) +" = " + valueStr(e);
 	}
 	
+	public static function constStr( c : Const ) {
+		return switch(c) {
+		case CNull: "null";
+		case CInt(i): i + "i";
+		case CFloat(v): v + "f";
+		case CBool(b): b ? "true":"false";
+		case CFloats(a): Std.string(a);
+		case CObject(fields): "{" + [for( f in fields.keys() ) f + " : " + constStr(fields.get(f))].join(", ") + "}";
+		case CArray(cl): "[" + [for( v in cl ) constStr(v)].join(", ") + "]";
+		};
+	}
+	
 	public static function valueStr( v : CodeValue ) {
 		if( v == null )
 			return "NULL";
 		return switch( v.d ) {
 		case CConst(c):
-			switch(c) {
-			case CNull: "null";
-			case CInt(i): i + "i";
-			case CFloat(v): v + "f";
-			case CBool(b): b ? "true":"false";
-			case CFloats(a): Std.string(a);
-			}
+			constStr(c);
 		case CVar(v, swiz):
 			var str;
 			if( v.name.charAt(0) == "$" )
@@ -138,12 +144,14 @@ class Debug {
 			var str = "(if( " + valueStr(cond) +" ) " + blockStr(eif);
 			if( eelse != null ) str += " else " + blockStr(eelse);
 			str+")";
-		case CFor(it, start, end, exprs):
-			"for( " + it.name + "#" + it.id + " in " + valueStr(start) + "..." + valueStr(end) + " ) " + blockStr(exprs);
+		case CFor(v, it, exprs):
+			"for( " + v.name + "#" + v.id + " in " + valueStr(it) + " ) " + blockStr(exprs);
 		case CCond(cond, eif, eelse):
 			"(" + valueStr(cond) + " ? " + valueStr(eif) + " : " + valueStr(eelse) + ")";
 		case CAccess(v, idx):
-			"~" + v.name+"#"+v.id + "[" + valueStr(idx) + "]";
+			"~" + v.name + "#" + v.id + "[" + valueStr(idx) + "]";
+		case CField(e, f):
+			valueStr(e) + "." + f;
 		}
 	}
 	

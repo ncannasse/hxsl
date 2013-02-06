@@ -31,27 +31,40 @@ import hxsl.Data;
 class ShaderMacros {
 
 	static function realType( t : VarType, p : Position ) : ComplexType {
-		return TPath(switch( t ) {
+		return switch( t ) {
 		case TNull: throw "assert";
-		case TBool: { pack : [], name : "Bool", params : [], sub : null };
-		case TFloat: { pack : [], name : "Float", params : [], sub : null };
-		case TFloat2, TFloat3, TFloat4: { pack : ["hxsl"], name : "ShaderTypes", params : [], sub : "Vector" };
-		case TInt: { pack : [], name : "Int", params : [], sub : null };
-		case TMatrix(_): { pack : ["hxsl"], name: "ShaderTypes", params : [], sub : "Matrix" };
-		case TTexture(_): { pack : ["hxsl"], name : "ShaderTypes", params : [], sub : "Texture" };
-		case TArray(t, size): { pack : ["hxsl"], name : "ShaderTypes", sub : "FixedArray", params : [TPType(realType(t,p)), TPExpr( { expr : EConst(CInt(""+size)), pos : p } )] };
-		});
+		case TBool: TPath({ pack : [], name : "Bool", params : [], sub : null });
+		case TFloat: TPath({ pack : [], name : "Float", params : [], sub : null });
+		case TFloat2, TFloat3, TFloat4: TPath({ pack : ["hxsl"], name : "ShaderTypes", params : [], sub : "Vector" });
+		case TInt: TPath({ pack : [], name : "Int", params : [], sub : null });
+		case TMatrix(_): TPath({ pack : ["hxsl"], name: "ShaderTypes", params : [], sub : "Matrix" });
+		case TTexture(_): TPath( { pack : ["hxsl"], name : "ShaderTypes", params : [], sub : "Texture" } );
+		case TArray(t,0): TPath( { pack : [], name : "Array", params : [TPType(realType(t, p))] } );
+		case TArray(t, size): TPath( { pack : ["hxsl"], name : "ShaderTypes", sub : "FixedArray", params : [TPType(realType(t, p)), TPExpr( { expr : EConst(CInt("" + size)), pos : p } )] } );
+		case TObject(fields): TAnonymous([for( f in fields ) { name : f.name, pos : p, kind : FVar(realType(f.t, p)), access : [], meta : [], doc :null }]);
+		};
 	}
 	
 	static function isMutable( t : VarType ) {
 		return switch( t ) {
 		case TNull,TFloat, TBool, TInt, TTexture(_): false;
-		case TFloat2, TFloat3, TFloat4, TMatrix(_), TArray(_): true;
+		case TFloat2, TFloat3, TFloat4, TMatrix(_), TArray(_), TObject(_): true;
 		};
 	}
 
-	static function saveType( t : VarType, eindex, evar, pos, rec = 0 ) {
-		var args = [{ expr : EConst(CIdent("_params")), pos : pos }, { expr : eindex, pos : pos }, evar];
+	static function freeVar( eindex : Expr, saves : Array<Expr> ) {
+		switch( eindex.expr ) {
+		case EArray(_, { expr : EConst(CInt(i)) } ):
+			var vn = "_m" + i;
+			saves.push(macro var $vn = $eindex);
+			return macro $i{vn};
+		default:
+			return eindex;
+		}
+	}
+	
+	static function saveType( t : VarType, eindex : Expr, evar : Expr, pos, rec = 0 ) {
+		var args = [{ expr : EConst(CIdent("_params")), pos : pos }, eindex, evar];
 		var name = switch( t ) {
 		case TBool, TNull, TTexture(_): throw "assert";
 		case TInt: "Int";
@@ -64,25 +77,53 @@ class ShaderMacros {
 			args.push( { expr : EConst(CInt(c + "")), pos : pos } );
 			if( t.t ) "MatrixT" else "Matrix";
 		case TArray(t, size):
+			var saves = [];
+			eindex = freeVar(eindex,saves);
 			var vi = "i" + rec, vk = "k" + rec;
 			var ei = { expr : EConst(CIdent(vi)), pos : pos };
 			var ek = { expr : EConst(CIdent(vk)), pos : pos };
-			var esize = { expr : EConst(CInt(size + "")), pos : pos };
-			var stride = Tools.regSize(t);
-			var save = saveType(
-				t,
-				EBinop(OpAdd, { expr : eindex, pos : pos }, { expr : EBinop(OpMult, { expr : EConst(CIdent(vi)), pos : pos }, { expr : EConst(CInt((stride * 4) + "")), pos : pos } ), pos : pos } ),
-				ek,
-				pos,
-				rec + 1
-			);
-			return macro {
-				for( $ei in 0...$esize ) {
-					var $vk = $evar[$ei];
-					if( $ek == null ) break;
+			var eit = size == 0 ? evar : macro 0...($v{size});
+			var save = saveType(t, eindex, ek, pos, rec + 1);
+			
+			switch( t ) {
+			case TArray(_, 0), TObject(_):
+			default:
+				save = macro {
 					$save;
+					$eindex += ($v{Tools.regSize(t) * 4});
 				}
 			}
+			
+			if( size == 0 )
+				saves.push(macro for( $ek in $eit ) $save);
+			else
+				saves.push(macro
+					for( $ei in $eit ) {
+						var $vk = $evar[$ei];
+						if( $ek == null ) break;
+						$save;
+					}
+				);
+			return macro { $a{saves}; };
+		case TObject(fields):
+			var saves = [];
+			eindex = freeVar(eindex,saves);
+			var vo = "o" + rec;
+			var eo = { expr : EConst(CIdent(vo)), pos : pos };
+			for( f in fields ) {
+				var save = saveType(f.t, eindex, { expr : EField(eo, f.name), pos : pos }, pos, rec + 1);
+				saves.push(save);
+				switch( f.t ) {
+				case TArray(_, 0), TObject(_):
+				default:
+					saves.push(macro $eindex += ($v{Tools.regSize(f.t) * 4}));
+				}
+			}
+			var vt = realType(t, pos);
+			return macro {
+				var $vo : $vt = $evar;
+				if( $eo != null ) {$a{saves}}
+			};
 		}
 		return { expr : ECall( { expr : EConst(CIdent("save" + name)), pos : pos }, args), pos : pos };
 	}
@@ -144,7 +185,8 @@ class ShaderMacros {
 		// create all the variables accessors
 		var allVars = Tools.getAllVars(data);
 		
-		var updates = [], constructs = [], paramCount = 0, texCount = 0, paramVectorCount = 0, paramMatrixCount = 0, constCount = 0;
+		var updates = [], constructs = [];
+		var paramCount = 0, texCount = 0, paramVectorCount = 0, paramMatrixCount = 0, paramObjectCount = 0, constCount = 0, lengthsCount = 0;
 		
 		for( v in allVars ) {
 			var pos = v.pos;
@@ -213,7 +255,7 @@ class ShaderMacros {
 					access : [],
 				});
 
-				var mapIndex = EArray( { expr : EConst(CIdent("_map")), pos : pos }, { expr : EConst(CInt("" + constIndex)), pos:pos } );
+				var mapIndex = { expr : EArray( { expr : EConst(CIdent("_map")), pos : pos }, { expr : EConst(CInt("" + constIndex)), pos:pos } ), pos : pos };
 				var save = saveType(v.type, mapIndex, evar, pos);
 				updates.push({ v : v, save : save });
 				
@@ -276,14 +318,81 @@ class ShaderMacros {
 						access : [AInline],
 					});
 
-					var mapIndex = EArray( { expr : EConst(CIdent("_map")), pos : pos }, { expr : EConst(CInt("" + constIndex)), pos:pos } );
+					var mapIndex = { expr :EArray( { expr : EConst(CIdent("_map")), pos : pos }, { expr : EConst(CInt("" + constIndex)), pos:pos } ), pos : pos };
+					var save = saveType(v.type, mapIndex, evar, pos);
+					updates.push( { v : v, save : save } );
+
+				case TObject(_):
+					
+					var evar = { expr : EArray( { expr : EConst(CIdent("paramObjects")), pos : pos }, { expr : EConst(CInt("" + paramObjectCount++)), pos : pos } ), pos : pos };
+					
+					var lname = "_l" + paramIndex;
+					var lvar = { expr : EConst(CIdent(lname)), pos : pos };
+					
+					function loop(v,t) {
+						switch( t ) {
+						case TBool:
+							throw "Bool not supported in object";
+						case TObject(fields):
+							var a = [];
+							for( f in fields ) {
+								var v = loop({ expr : EField(v,f.name), pos : pos },f.t);
+								if( v != null )
+									a.push(v);
+							}
+							if( a.length == 0 )
+								return null;
+							return { expr : EBlock(a), pos : pos };
+						case TArray(t, 0):
+							var vs = macro sub;
+							var sub = loop(vs,t);
+							return if( sub == null )
+								macro if( $v == null ) $lvar.push(0) else $lvar.push($v.length);
+							else
+								macro if( $v == null ) $lvar.push(0) else { $lvar.push($v.length); for( $vs in $v ) $sub; };
+						default:
+							// nothing
+							return null;
+						}
+					}
+					var saveLength = loop(macro v, v.type);
+					if( saveLength == null )
+						saveLength = macro { }
+					else
+						saveLength = macro if( v == null ) paramLengths[$v{paramIndex}] = null else { var $lname = paramLengths[$v { paramIndex } ] = []; $saveLength; };
+					
+					fields.push( {
+						name : "get_" + v.name,
+						kind : FFun({ ret : t, params : [], args : [], expr : macro { var tmp = $evar; if( tmp != null ) modified = true; return tmp; } }),
+						pos : pos,
+						access : [AInline],
+					});
+
+					fields.push( {
+						name : "set_" + v.name,
+						kind : FFun( {
+							ret : t,
+							params : [],
+							args : [ { name : "v", type : t, opt : false } ],
+							expr : macro {
+								modified = true;
+								$evar = v;
+								setParamBit($index, v != null);
+								$saveLength;
+								return v;
+							} }),
+						pos : pos,
+						access : [AInline],
+					});
+					
+					var mapIndex = { expr : EArray( { expr : EConst(CIdent("_map")), pos : pos }, { expr : EConst(CInt("" + constIndex)), pos:pos } ), pos : pos };
 					var save = saveType(v.type, mapIndex, evar, pos);
 					updates.push( { v : v, save : save } );
 					
 				default:
 					var evar = null;
 					switch( v.type ) {
-					case TBool, TFloat, TNull, TTexture(_): throw "assert";
+					case TBool, TFloat, TNull, TTexture(_), TObject(_): throw "assert";
 					case TArray(_), TInt: Context.error("This type is not yet supported as shader parameter", v.pos);
 					case TFloat2, TFloat3, TFloat4:
 						evar = { expr : EArray( { expr : EConst(CIdent("paramVectors")), pos : pos }, { expr : EConst(CInt("" + paramVectorCount++)), pos : pos } ), pos : pos };
@@ -314,7 +423,7 @@ class ShaderMacros {
 						access : [AInline],
 					});
 
-					var mapIndex = EArray( { expr : EConst(CIdent("_map")), pos : pos }, { expr : EConst(CInt("" + constIndex)), pos:pos } );
+					var mapIndex = { expr : EArray( { expr : EConst(CIdent("_map")), pos : pos }, { expr : EConst(CInt("" + constIndex)), pos:pos } ), pos : pos };
 					var save = saveType(v.type, mapIndex, evar, pos);
 					updates.push( { v : v, save : save } );
 				}
@@ -407,7 +516,7 @@ class ShaderMacros {
 				name : "updateVertexParams",
 				kind : FFun( {
 					ret : null,
-					args : [{ name : "_params", type : null, opt : false }, { name : "_map", type : macro : flash.Vector<Int>, opt : false }],
+					args : [{ name : "_params", type : null, opt : false }, { name : "_map", type : macro : haxe.ds.Vector<Int>, opt : false }],
 					params : [],
 					expr : { expr : EBlock(updateVertex), pos : pos },
 				}),
@@ -419,7 +528,7 @@ class ShaderMacros {
 				name : "updateFragmentParams",
 				kind : FFun( {
 					ret : null,
-					args : [{ name : "_params", type : null, opt : false }, { name : "_map", type : macro : flash.Vector<Int>, opt : false }],
+					args : [{ name : "_params", type : null, opt : false }, { name : "_map", type : macro : haxe.ds.Vector<Int>, opt : false }],
 					params : [],
 					expr : { expr : EBlock(updateFragment), pos : pos },
 				}),
