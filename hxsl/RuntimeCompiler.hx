@@ -203,7 +203,7 @@ class RuntimeCompiler {
 	function indexVars( c : Code, constVars : Array<Variable> ) {
 		var indexes = [0, 0, 0, 0, 0, 0];
 
-		function calculateUsedSize( v : Variable, index : { i : Int } ) {
+		function calculateUsedSize( v : Variable, index : { i : Int } ) : { v : Variable, size : Int } {
 			v.index = index.i;
 			var p = props(v);
 			if( p.ref != null ) p.ref.index = v.index;
@@ -250,8 +250,9 @@ class RuntimeCompiler {
 			var p = props(v);
 			if( p.isVertex == c.vertex ) {
 				var tkind = Type.enumIndex(v.kind);
-				var size = calculateUsedSize(v,{ i : indexes[tkind] }).size;
-				indexes[tkind] += size;
+				var inf = calculateUsedSize(v, { i : indexes[tkind] } );
+				var v = inf.v;
+				indexes[tkind] += inf.size;
 				switch( v.kind ) {
 				case VConst, VTexture:
 					c.args.push(v);
@@ -489,44 +490,48 @@ class RuntimeCompiler {
 					compileAssign(e.v, e.e);
 			}
 			return;
-		case CFor(vloop,it,exprs):
+		case CFor(vloop, it, exprs):
 			switch( it.d ) {
 			case COp(CInterval, _first, _max):
 				throw "TODO";
-			case CVar(v, _):
-				switch( v.type ) {
-				case TArray(t, size):
-					var v = newVar(v, v.pos);
-					var values = [];
-					if( size == 0 ) {
-						size = switch( compileCond(it) ) {
-						case CArray(vl): values = vl; vl.length;
-						case CNull: 0;
-						default: throw "assert";
+			default:
+				var vit = compileValue(it);
+				switch( vit.d ) {
+				case CVar(v,_):
+					switch( v.type ) {
+					case TArray(t, size):
+						var v = newVar(v, v.pos);
+						var values = [];
+						if( size == 0 ) {
+							size = switch( compileCond(it) ) {
+							case CArray(vl): values = vl; vl.length;
+							case CNull: 0;
+							default: throw "assert";
+							}
+							v.type = TArray(t, size);
 						}
-						v.type = TArray(t, size);
+						var obj = objectVars.get(v.id);
+						if( obj == null ) {
+							obj = { v : v, fields : new Map() };
+							objectVars.set(v.id, obj);
+						}
+						var p = props(vloop);
+						for( i in 0...size ) {
+							var vi = allocVar("$" + v.name + "#" + i, VConst, t, e.p);
+							vi.index = i;
+							obj.fields.set("" + i, vi);
+							p.newVar = vi;
+							p.value = props(vi).value = values[i];
+							for( e in exprs )
+								compileAssign(e.v, e.e);
+						}
+						return;
+					default:
+						throw "assert";
 					}
-					var obj = objectVars.get(v.id);
-					if( obj == null ) {
-						obj = { v : v, fields : new Map() };
-						objectVars.set(v.id, obj);
-					}
-					var p = props(vloop);
-					for( i in 0...size ) {
-						var vi = allocVar("$" + v.name + "#" + i, VConst, t, e.p);
-						vi.index = i;
-						obj.fields.set("" + i, vi);
-						p.newVar = vi;
-						p.value = props(vi).value = values[i];
-						for( e in exprs )
-							compileAssign(e.v, e.e);
-					}
-					return;
 				default:
 					throw "assert";
 				}
-			default:
-				throw "assert";
 			}
 			return;
 		case CUnop(op, _):
@@ -846,6 +851,21 @@ class RuntimeCompiler {
 					obj.fields.set(f, v2);
 				}
 				return { d : CVar(v2, null), t : v2.type, p : e.p };
+			case CConst(CNull):
+				return v;
+			case CConst(CObject(fl)):
+				var val = fl.get(f);
+				var ft = TNull;
+				switch( v.t ) {
+				case TObject(fl):
+					for( fi in fl )
+						if( fi.name == f ) {
+							ft = fi.t;
+							break;
+						}
+				default:
+				}
+				return v == null ? { d : CConst(CNull), t : TNull, p : e.p } : { d : CConst(val), t : ft, p : e.p };
 			default:
 				throw "assert";
 			}

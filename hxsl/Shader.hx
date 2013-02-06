@@ -32,6 +32,7 @@ import haxe.ds.Vector;
 class ShaderInstance {
 
 	public var bits : Int;
+	public var lengths : Array<Array<Int>>;
 	
 	public var program : flash.display3D.Program3D;
 
@@ -70,21 +71,35 @@ class ShaderGlobals {
 	public var hasParamVector : Bool;
 	public var hasParamMatrix : Bool;
 	public var hasParamObject : Bool;
+	public var hasParamLengths : Bool;
 
 	var constCount : Int;
-	var instances : Map<Int,ShaderInstance>;
+	var instances : Map<String,ShaderInstance>;
 	var hparams : Map<Int,hxsl.Data.Variable>;
 	
 	public function new( hxStr : String ) {
 		this.data = hxsl.Unserialize.unserialize(hxStr);
+
+		function checkSubType(t:Data.VarType) {
+			switch( t ) {
+			case TNull, TFloat, TBool, TInt, TTexture(_),TFloat2, TFloat3, TFloat4, TMatrix(_):
+			case TArray(t, 0): hasParamLengths = true; checkSubType(t);
+			case TObject(fields):
+				for( f in fields )
+					checkSubType(f.t);
+			}
+		}
 		
 		function checkType(t:Data.VarType) {
 			switch( t ) {
 			case TNull, TFloat, TBool, TInt, TTexture(_):
 			case TFloat2, TFloat3, TFloat4: hasParamVector = true;
-			case TArray(t, _): checkType(t);
+			case TArray(_): throw "assert";
 			case TMatrix(_): hasParamMatrix = true;
-			case TObject(_): hasParamObject = true;
+			case TObject(fields):
+				hasParamObject = true;
+				for( f in fields )
+					checkSubType(f.t);
 			}
 		}
 		hparams = new Map();
@@ -139,30 +154,46 @@ class ShaderGlobals {
 		return { bytes : o.getBytes(), consts : consts, map : map };
 	}
 
-	public function compileShader( bits ) {
+	public function compileShader( bits, lengths : Array<Array<Int>> ) {
 		var r = new hxsl.RuntimeCompiler();
 		var params = { };
 		var paramCount = 0;
 		for( v in Tools.getAllVars(data) )
 			if( v.kind == VParam ) {
 				if( bits & (1 << paramCount) != 0 ) {
-					var c : Dynamic;
-					if( v.type == TBool ) c = true else c = 0;
-					Reflect.setField(params, v.name, c);
+					var len = lengths == null ? null : lengths[paramCount];
+					var lenPos = 0;
+					function loop(t) : Dynamic {
+						switch( t ) {
+						case TBool: return true;
+						case TArray(t, 0):
+							return [for( i in 0...len[lenPos++] ) loop(t)];
+						case TObject(fl):
+							var o = { };
+							for( f in fl )
+								Reflect.setField(o, f.name, loop(f.t));
+							return o;
+						default:
+							return 0;
+						}
+					}
+					Reflect.setField(params, v.name, loop(v.type));
 				}
 				paramCount++;
 			}
 		return r.compile(data, params);
 	}
 	
-	public function getInstance( bits : Int ) {
-		var i = instances.get(bits);
+	public function getInstance( bits : Int, lengths : Array<Array<Int>> ) {
+		var signature = bits + ":" + lengths;
+		var i = instances.get(signature);
 		if( i != null )
 			return i;
-		var data2 = compileShader(bits);
+		var data2 = compileShader(bits, lengths);
 		
 		i = new ShaderInstance();
 		i.bits = bits;
+		i.lengths = lengths == null ? null : lengths.copy();
 		
 		var v = build(data2.vertex);
 		i.vertexBytes = v.bytes;
@@ -216,7 +247,7 @@ class ShaderGlobals {
 				throw "assert " + v.kind;
 			}
 
-		instances.set(bits, i);
+		instances.set(signature, i);
 		
 		return i;
 	}
@@ -233,8 +264,10 @@ class Shader {
 	var globals : ShaderGlobals;
 	var modified : Bool;
 	var paramBits : Int;
+	var paramLengths : Array<Array<Int>>;
 	var paramVectors : Array<ShaderTypes.Vector>;
 	var paramMatrixes : Array<ShaderTypes.Matrix>;
+	var paramObjects : Array<Dynamic>;
 	var allTextures : Array<ShaderTypes.Texture>;
 	var instance : ShaderInstance;
 	
@@ -248,6 +281,8 @@ class Shader {
 		if( globals.texSize > 0 ) allTextures = [];
 		if( globals.hasParamVector ) paramVectors = [];
 		if( globals.hasParamMatrix ) paramMatrixes = [];
+		if( globals.hasParamObject ) paramObjects = [];
+		if( globals.hasParamLengths ) paramLengths = [];
 		shaderId = ID++;
 	}
 	
@@ -266,8 +301,8 @@ class Shader {
 	}
 
 	public function getInstance() : ShaderInstance {
-		if( instance == null || instance.bits != paramBits )
-			instance = globals.getInstance(paramBits);
+		if( instance == null || instance.bits != paramBits || (instance.lengths != null && Std.string(instance.lengths) != Std.string(paramLengths)) )
+			instance = globals.getInstance(paramBits, paramLengths);
 		if( modified || instance.curShaderId != shaderId ) {
 			updateParams();
 			modified = false;
@@ -277,7 +312,7 @@ class Shader {
 
 	#if debug
 	public function getDebugShaderCode( bytecode = false ) {
-		var data = globals.compileShader(paramBits);
+		var data = globals.compileShader(paramBits,paramLengths);
 		if( !bytecode )
 			return hxsl.Debug.dataStr(data);
 		function getCode(c) {
