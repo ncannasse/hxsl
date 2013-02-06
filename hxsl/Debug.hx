@@ -55,7 +55,7 @@ class Debug {
 		}
 		lines.push("code:");
 		for( e in c.exprs )
-			lines.push("\t" + exprStr(e.v, e.e));
+			lines.push("\t" + exprStr(e.v, e.e).split("\t").join("\t\t"));
 		return lines.join("\n");
 	}
 	
@@ -73,6 +73,7 @@ class Debug {
 		case CBool(b): b ? "true":"false";
 		case CFloats(a): Std.string(a);
 		case CObject(fields): "{" + [for( f in fields.keys() ) f + " : " + constStr(fields.get(f))].join(", ") + "}";
+		case CArray(cl): "[" + [for( v in cl ) constStr(v)].join(", ") + "]";
 		};
 	}
 	
@@ -143,8 +144,8 @@ class Debug {
 			var str = "(if( " + valueStr(cond) +" ) " + blockStr(eif);
 			if( eelse != null ) str += " else " + blockStr(eelse);
 			str+")";
-		case CFor(it, start, end, exprs):
-			"for( " + it.name + "#" + it.id + " in " + valueStr(start) + "..." + valueStr(end) + " ) " + blockStr(exprs);
+		case CFor(v, it, exprs):
+			"for( " + v.name + "#" + v.id + " in " + valueStr(it) + " ) " + blockStr(exprs);
 		case CCond(cond, eif, eelse):
 			"(" + valueStr(cond) + " ? " + valueStr(eif) + " : " + valueStr(eelse) + ")";
 		case CAccess(v, idx):

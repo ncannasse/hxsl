@@ -143,7 +143,7 @@ class Main {
 	}
 
 	static function checkShaders() {
-/*
+
 		// basic shader
 		test({
 			var input : {
@@ -569,7 +569,7 @@ class Main {
 			
 			mov out, c0.xxxx
 		",{ tmp : null });
-*/
+
 		//
 		test( {
 			var pos : Input<Float3>;

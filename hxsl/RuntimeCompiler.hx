@@ -219,7 +219,6 @@ class RuntimeCompiler {
 					var fv = o.fields.get(f.name);
 					if( fv != null ) {
 						var k = calculateUsedSize(fv, index);
-						index.i += k.size;
 						tot += k.size;
 						fl.push({ name : f.name, t : k.v.type });
 					}
@@ -231,8 +230,19 @@ class RuntimeCompiler {
 					usedVars[index] = v;
 				}
 				return { v : v, size : tot };
+			case TArray(_, size) if( objectVars.exists(v.id) ):
+				var o = objectVars.get(v.id);
+				var tot = 0;
+				for( i in 0...size ) {
+					var fv = o.fields.get(""+i);
+					var k = calculateUsedSize(fv, index);
+					tot += k.size;
+				}
+				return { v : v, size : tot };
 			default:
-				return { v : v, size : Tools.regSize(v.type) };
+				var size = Tools.regSize(v.type);
+				index.i += size;
+				return { v : v, size : size };
 			}
 		}
 		
@@ -479,27 +489,44 @@ class RuntimeCompiler {
 					compileAssign(e.v, e.e);
 			}
 			return;
-		case CFor(v,it,exprs):
+		case CFor(vloop,it,exprs):
 			switch( it.d ) {
 			case COp(CInterval, _first, _max):
 				throw "TODO";
-			default:
-				switch( compileCond(it) ) {
-				case CArray(vl):
-					var p = props(v);
-					var count = 0;
-					for( val in vl ) {
-						p.newVar = allocVar("$" + v.name + "#" + (count++), VConst, v.type, e.p);
-						usedVars.push(p.newVar);
-						props(p.newVar).value = p.value = val;
+			case CVar(v, _):
+				switch( v.type ) {
+				case TArray(t, size):
+					var v = newVar(v, v.pos);
+					var values = [];
+					if( size == 0 ) {
+						size = switch( compileCond(it) ) {
+						case CArray(vl): values = vl; vl.length;
+						case CNull: 0;
+						default: throw "assert";
+						}
+						v.type = TArray(t, size);
+					}
+					var obj = objectVars.get(v.id);
+					if( obj == null ) {
+						obj = { v : v, fields : new Map() };
+						objectVars.set(v.id, obj);
+					}
+					var p = props(vloop);
+					for( i in 0...size ) {
+						var vi = allocVar("$" + v.name + "#" + i, VConst, t, e.p);
+						vi.index = i;
+						obj.fields.set("" + i, vi);
+						p.newVar = vi;
+						p.value = props(vi).value = values[i];
 						for( e in exprs )
 							compileAssign(e.v, e.e);
 					}
-				case CNull:
-					// consider that we don't iterate over null array
+					return;
 				default:
 					throw "assert";
 				}
+			default:
+				throw "assert";
 			}
 			return;
 		case CUnop(op, _):
@@ -808,7 +835,6 @@ class RuntimeCompiler {
 			v = compileValue(v, isTarget);
 			switch( v.d ) {
 			case CVar(v, _):
-				trace(v.id + ":" + f);
 				var obj = objectVars.get(v.id);
 				if( obj == null ) {
 					obj = { v : v, fields : new Map() };
