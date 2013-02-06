@@ -319,7 +319,8 @@ class Compiler {
 			switch( vr.kind ) {
 			case VVar:
 				if( !cur.vertex ) error("You can't write a variable in fragment shader", v.p);
-				if( vp.write & bits != 0  ) error("Multiple writes to the same variable are not allowed", v.p);
+				// disable : conditional compilation might have if/else flow
+				// 	if( vp.write & bits != 0  ) error("Multiple writes to the same variable are not allowed", v.p);
 				vp.write |= bits;
 			case VConst, VParam:
 				error("Constant values cannot be written", v.p);
