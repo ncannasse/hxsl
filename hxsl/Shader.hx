@@ -148,6 +148,10 @@ class ShaderGlobals {
 				consts[pos++] = 1.;
 		}
 		
+		var maxRegs = 128;
+		if( nregs > maxRegs )
+			throw "Shader has "+nregs+" parameters (max "+maxRegs+" allowed)";
+		
 		var agal = new hxsl.AgalCompiler().compile(code);
 		var o = new haxe.io.BytesOutput();
 		new format.agal.Writer(o).write(agal);
