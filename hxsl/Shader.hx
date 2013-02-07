@@ -254,7 +254,7 @@ class ShaderGlobals {
 	
 	public function free() {
 		for (k in instances) k.program.dispose();
-		instances = new IntHash<ShaderInstance>();
+		instances = new Map<String, ShaderInstance>();
 	}
 	
 }
