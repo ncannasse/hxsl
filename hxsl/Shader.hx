@@ -543,6 +543,10 @@ class Shader {
 		if( v ) paramBits |= 1 << n else paramBits &= ~(1 << n);
 	}
 	
+	public function rebuildVars() {
+		modified = true;
+	}
+	
 	public function toString() {
 		return Type.getClassName(Type.getClass(this));
 	}
