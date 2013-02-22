@@ -216,7 +216,7 @@ class ShaderGlobals {
 				tmap.push(realV.index);
 			}
 		i.textureMap = Vector.fromArrayCopy(tmap);
-		i.textures = new Vector(i.textureMap.length());
+		i.textures = new Vector(i.textureMap.length);
 		
 		i.bufferFormat = 0;
 		i.bufferNames = [];
@@ -387,7 +387,7 @@ class Shader {
 		// copy vars from our local shader to the instance
 		updateVertexParams(instance.vertexVars, instance.vertexMap);
 		updateFragmentParams(instance.fragmentVars, instance.fragmentMap);
-		for( i in 0...instance.textureMap.length() )
+		for( i in 0...instance.textureMap.length )
 			instance.textures.set(i,allTextures[instance.textureMap.get(i)]);
 		instance.curShaderId = shaderId;
 		instance.varsChanged = true;
