@@ -346,7 +346,7 @@ class Shader {
 		ctx.setProgram(i.program);
 		ctx.setProgramConstantsFromVector(flash.display3D.Context3DProgramType.VERTEX, 0, i.vertexVars.toData());
 		ctx.setProgramConstantsFromVector(flash.display3D.Context3DProgramType.FRAGMENT, 0, i.fragmentVars.toData());
-		for( k in 0...i.textures.length() )
+		for( k in 0...i.textures.length )
 			ctx.setTextureAt(k, i.textures.get(k));
 		var FORMAT = [
 			flash.display3D.Context3DVertexBufferFormat.BYTES_4,
@@ -369,7 +369,7 @@ class Shader {
 		var i = instance;
 		if( i == null )
 			return;
-		for( k in 0...i.textures.length() )
+		for( k in 0...i.textures.length )
 			ctx.setTextureAt(k, null);
 		var pos = 0, offset = 0;
 		var bits = i.bufferFormat;

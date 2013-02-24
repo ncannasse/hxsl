@@ -24,12 +24,6 @@
 package hxsl;
 import hxsl.Data;
 
-#if flash
-	private typedef NameMap = flash.utils.TypedDictionary<String, Int>;
-#else
-	private typedef NameMap = Hash<Int>;
-#end
-
 enum ProgramType { Vertex; Fragment; }
 
 /**
@@ -69,31 +63,33 @@ class PicoShaderInstance
 		this.vertexLiterals = data.vertex.consts;
 		this.fragmentLiterals = data.fragment.consts;
 
-		this.inputRegisters = new NameMap();
-		for ( v in data.vars ) {
+		this.inputRegisters = new Map();
+		for ( v in data.globals ) {
 			if ( v.kind == VInput ) {
 				this.inputRegisters.set(v.name, v.index);
 			}
 		}
 
 		this.vertexLiteralStart = 0;
-		this.vertexParamRegisters = new NameMap();
+		this.vertexParamRegisters = new Map();
 		for ( arg in data.vertex.args ) {
 			this.vertexParamRegisters.set(arg.name, arg.index);
-			this.vertexLiteralStart = arg.index + Data.Tools.regSize(arg.type);
+			this.vertexLiteralStart = arg.index + Tools.regSize(arg.type);
 		}
 
 		this.fragmentLiteralStart = 0;
-		this.fragmentParamRegisters = new NameMap();
+		this.fragmentParamRegisters = new Map();
+		this.textureRegisters = new Map();
 		for ( arg in data.fragment.args ) {
-			this.fragmentParamRegisters.set(arg.name, arg.index);
-			this.fragmentLiteralStart = arg.index + Data.Tools.regSize(arg.type);
+			switch( arg.kind ) {
+			case VTexture:
+				this.textureRegisters.set(arg.name, arg.index);
+			default:
+				this.fragmentParamRegisters.set(arg.name, arg.index);
+				this.fragmentLiteralStart = arg.index + Tools.regSize(arg.type);
+			}
 		}
 
-		this.textureRegisters = new NameMap();
-		for ( tex in data.fragment.tex ) {
-			this.textureRegisters.set(tex.name, tex.index);
-		}
 	}
 
 	/** The shader this instance was created from */
@@ -103,19 +99,19 @@ class PicoShaderInstance
 	/** Platform-specific fragment code */
 	public var fragmentCode : Dynamic;
 	/** Map input name to register */
-	public var inputRegisters:NameMap;
+	public var inputRegisters:Map<String,Int>;
 	/** Map vertex shader parameter name to register */
-	public var vertexParamRegisters:NameMap;
+	public var vertexParamRegisters:Map<String,Int>;
 	/** Map fragment shader parameter name to register */
-	public var fragmentParamRegisters:NameMap;
+	public var fragmentParamRegisters:Map<String,Int>;
 	/** Map texture name to register */
-	public var textureRegisters:NameMap;
+	public var textureRegisters:Map<String,Int>;
 	/** Literals to apply to vertex shader */
-	public var vertexLiterals:Array<Array<Float>>; 
+	public var vertexLiterals:Array<Array<Float>>;
 	/** Literals to apply to fragment shader */
-	public var fragmentLiterals:Array<Array<Float>>; 
+	public var fragmentLiterals:Array<Array<Float>>;
 	/** Register that vertex shader literals should be uploaded to */
-	public var vertexLiteralStart:Int; 
+	public var vertexLiteralStart:Int;
 	/** Register that fragment shader literals should be uploaded to */
-	public var fragmentLiteralStart:Int; 
+	public var fragmentLiteralStart:Int;
 }
