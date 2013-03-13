@@ -256,6 +256,11 @@ class ShaderGlobals {
 		return i;
 	}
 	
+	public function free() {
+		for (k in instances) k.program.dispose();
+		instances = new Map<String, ShaderInstance>();
+	}
+	
 }
 
 
@@ -312,6 +317,16 @@ class Shader {
 			modified = false;
 		}
 		return instance;
+	}
+	
+	public function free() {
+		globals.free();
+		instance = null;
+	}
+	
+	static public function freeCache( ref:Class<hxsl.Shader> ) {
+		var c : { GLOBALS : ShaderGlobals } = cast ref; // TODO: macro here
+		if (c.GLOBALS != null) c.GLOBALS.free();
 	}
 
 	#if debug
