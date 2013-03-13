@@ -216,7 +216,7 @@ class ShaderGlobals {
 				tmap.push(realV.index);
 			}
 		i.textureMap = Vector.fromArrayCopy(tmap);
-		i.textures = new Vector(i.textureMap.length());
+		i.textures = new Vector(i.textureMap.length);
 		
 		i.bufferFormat = 0;
 		i.bufferNames = [];
@@ -361,7 +361,7 @@ class Shader {
 		ctx.setProgram(i.program);
 		ctx.setProgramConstantsFromVector(flash.display3D.Context3DProgramType.VERTEX, 0, i.vertexVars.toData());
 		ctx.setProgramConstantsFromVector(flash.display3D.Context3DProgramType.FRAGMENT, 0, i.fragmentVars.toData());
-		for( k in 0...i.textures.length() )
+		for( k in 0...i.textures.length )
 			ctx.setTextureAt(k, i.textures.get(k));
 		var FORMAT = [
 			flash.display3D.Context3DVertexBufferFormat.BYTES_4,
@@ -384,7 +384,7 @@ class Shader {
 		var i = instance;
 		if( i == null )
 			return;
-		for( k in 0...i.textures.length() )
+		for( k in 0...i.textures.length )
 			ctx.setTextureAt(k, null);
 		var pos = 0, offset = 0;
 		var bits = i.bufferFormat;
@@ -402,7 +402,7 @@ class Shader {
 		// copy vars from our local shader to the instance
 		updateVertexParams(instance.vertexVars, instance.vertexMap);
 		updateFragmentParams(instance.fragmentVars, instance.fragmentMap);
-		for( i in 0...instance.textureMap.length() )
+		for( i in 0...instance.textureMap.length )
 			instance.textures.set(i,allTextures[instance.textureMap.get(i)]);
 		instance.curShaderId = shaderId;
 		instance.varsChanged = true;
@@ -556,6 +556,10 @@ class Shader {
 
 	inline function setParamBit( n : Int, v : Bool ) {
 		if( v ) paramBits |= 1 << n else paramBits &= ~(1 << n);
+	}
+	
+	public function rebuildVars() {
+		modified = true;
 	}
 	
 	public function toString() {

@@ -24,39 +24,33 @@
 package hxsl;
 import hxsl.Data;
 
-#if flash
-	private typedef TypeMap = flash.utils.TypedDictionary<String, VarType>;
-#else
-	private typedef TypeMap = Hash<VarType>;
-#end
-
 /** Simple shader builder that simply exports information about the shader. */
 @:autoBuild(hxsl.PicoBuild.shader()) class PicoShader {
 	public var idata:Data;
 
 	/** Name to type map for compile vars */
-	public var compileVarInfo : TypeMap;
+	public var compileVarInfo : Map<String,VarType>;
 	/** Name to type map for input vars */
-	public var inputVarInfo : TypeMap;
+	public var inputVarInfo : Map<String,VarType>;
 	/** Name to type map for vertex uniform constants */
-	public var vertexConstantInfo : TypeMap;
+	public var vertexConstantInfo : Map<String,VarType>;
 	/** Name to type map for fragment uniform constants */
-	public var fragmentConstantInfo : TypeMap;
+	public var fragmentConstantInfo : Map<String,VarType>;
 	/** Name to type map for textures */
-	public var textureInfo : TypeMap;
+	public var textureInfo : Map<String,VarType>;
 
 	public function new() {
 		this.idata = Unserialize.unserialize(getData());
 
-		compileVarInfo = createTypeMap(this.idata.vars, VCompileConstant);
-		inputVarInfo = createTypeMap(this.idata.vars, VInput);
+		compileVarInfo = createTypeMap(this.idata.globals, VConst);
+		inputVarInfo = createTypeMap(this.idata.globals, VInput);
 		vertexConstantInfo = createTypeMap(this.idata.vertex.args);
 		fragmentConstantInfo = createTypeMap(this.idata.fragment.args);
-		textureInfo = createTypeMap(this.idata.fragment.tex);
+		textureInfo = createTypeMap(this.idata.fragment.args, VTexture);
 	}
 
-	function createTypeMap(ar:Iterable<Variable>, kind:VarKind=null ) : TypeMap {
-		var out = new TypeMap();
+	function createTypeMap(ar:Iterable<Variable>, kind:VarKind=null ) : Map<String,VarType> {
+		var out = new Map();
 		for ( c in ar ) {
 			if ( kind == null || Type.enumEq(kind, c.kind) ) {
 				out.set(c.name, c.type);

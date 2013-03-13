@@ -2,6 +2,9 @@ package test;
 import haxe.macro.Expr;
 import hxsl.Unserialize;
 import hxsl.Serialize;
+
+import hxsl.PicoShader;
+
 #if macro
 import haxe.macro.Context;
 #end
