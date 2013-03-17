@@ -331,7 +331,7 @@ class Shader {
 	#end
 	
 	
-	#if !h3d
+	#if (!h3d && !tilezeit)
 	
 	public function bind( ctx : flash.display3D.Context3D, buffer : flash.display3D.VertexBuffer3D ) {
 		var i = getInstance();
@@ -449,6 +449,32 @@ class Shader {
 					}
 				}
 			}
+			#elseif tilezeit
+			params[index++] = m.m11;
+			if( c > 1 ) params[index++] = m.m21;
+			if( c > 2 ) params[index++] = m.m31;
+			if( c > 3 ) params[index++] = m.m41;
+			
+			if( r > 1 ) {
+				params[index++] = m.m12;
+				if( c > 1 ) params[index++] = m.m22;
+				if( c > 2 ) params[index++] = m.m32;
+				if( c > 3 ) params[index++] = m.m42;
+
+				if( r > 2 ) {
+					params[index++] = m.m13;
+					if( c > 1 ) params[index++] = m.m23;
+					if( c > 2 ) params[index++] = m.m33;
+					if( c > 3 ) params[index++] = m.m43;
+
+					if( r > 3 ) {
+						params[index++] = m.m14;
+						if( c > 1 ) params[index++] = m.m24;
+						if( c > 2 ) params[index++] = m.m34;
+						if( c > 3 ) params[index++] = m.m44;
+					}
+				}
+			}
 			#else
 			var m = m.rawData;
 			params[index++] = m[0];
@@ -479,7 +505,9 @@ class Shader {
 			#end
 		}
 	}
-
+	
+	
+	
 	inline function saveMatrixT( params : Vector<Float>, index : Int, m : ShaderTypes.Matrix, r : Int, c : Int ) {
 		if( index >= 0 ) {
 			#if h3d
@@ -505,6 +533,32 @@ class Shader {
 						if( c > 1 ) params[index++] = m._24;
 						if( c > 2 ) params[index++] = m._34;
 						if( c > 3 ) params[index++] = m._44;
+					}
+				}
+			}
+			#elseif tilezeit
+			params[index++] = m.m11;
+			if( c > 1 ) params[index++] = m.m12;
+			if( c > 2 ) params[index++] = m.m13;
+			if( c > 3 ) params[index++] = m.m14;
+			
+			if( r > 1 ) {
+				params[index++] = m.m21;
+				if( c > 1 ) params[index++] = m.m22;
+				if( c > 2 ) params[index++] = m.m23;
+				if( c > 3 ) params[index++] = m.m24;
+
+				if( r > 2 ) {
+					params[index++] = m.m31;
+					if( c > 1 ) params[index++] = m.m32;
+					if( c > 2 ) params[index++] = m.m33;
+					if( c > 3 ) params[index++] = m.m34;
+
+					if( r > 3 ) {
+						params[index++] = m.m41;
+						if( c > 1 ) params[index++] = m.m42;
+						if( c > 2 ) params[index++] = m.m43;
+						if( c > 3 ) params[index++] = m.m44;
 					}
 				}
 			}
