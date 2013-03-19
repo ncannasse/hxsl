@@ -58,6 +58,15 @@ class ShaderInstance {
 		curShaderId = -1;
 	}
 	
+	public function dispose() {
+		if( program != null ) {
+			program.dispose();
+			program = null;
+			if( lengths == null ) lengths = [];
+			lengths[0] = [-1]; // invalid value to force reload
+		}
+	}
+	
 }
 
 /**
@@ -76,6 +85,8 @@ class ShaderGlobals {
 	var constCount : Int;
 	var instances : Map<String,ShaderInstance>;
 	var hparams : Map<Int,hxsl.Data.Variable>;
+	
+	static var ALL = new Array();
 	
 	public function new( hxStr : String ) {
 		this.data = hxsl.Unserialize.unserialize(hxStr);
@@ -119,6 +130,7 @@ class ShaderGlobals {
 			}
 		
 		instances = new Map();
+		ALL.push(this);
 	}
 	
 	function build( code : hxsl.Data.Code ) {
@@ -254,6 +266,14 @@ class ShaderGlobals {
 		instances.set(signature, i);
 		
 		return i;
+	}
+	
+	public static function disposeAll() {
+		for( g in ALL ) {
+			for( i in g.instances )
+				i.dispose();
+			g.instances = new Map();
+		}
 	}
 	
 }
