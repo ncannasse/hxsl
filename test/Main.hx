@@ -52,7 +52,51 @@ class Main {
 		return o.getBytes();
 	}
 	
+	static function checkConsts( shader : hxsl.Data.Code, consts : Array<Expr> ) {
+		var prefix = shader.vertex?"vertex":"fragment";
+		if( shader.consts.length != consts.length )
+			throw new hxsl.Data.Error(prefix + " shader should have " + consts.length + " consts (" + shader.consts.length + " found = " + shader.consts + ")", shader.pos);
+		for( i in 0...shader.consts.length ) {
+			var v = shader.consts[i];
+			switch( consts[i].expr ) {
+			case EArrayDecl(vl):
+				var v2 = [];
+				for( vd in vl )
+					switch( vd.expr ) {
+					case EConst(CInt(a) | CFloat(a)):
+						v2.push(Std.parseFloat(a));
+					default:
+						throw "Invalid constant " + haxe.macro.ExprTools.toString(consts[i]);
+					}
+				for( k in 0...(v.length > v2.length ? v.length : v2.length) )
+					if( v2[k] != v[k] )
+						throw new hxsl.Data.Error(prefix + " shader constant #" + i + " is " + v + " but should be " + v2, shader.pos);
+			default:
+				throw "Invalid constant " + haxe.macro.ExprTools.toString(consts[i]);
+			}
+		}
+	}
+	
 	static function compileShader( shader : Expr, params : { } ) {
+		var consts = { vertex : null, fragment : null };
+		switch( shader.expr ) {
+		case EBlock(el):
+			for( i in 0...el.length )
+				switch( el[i].expr ) {
+				case EMeta({ name : ":const", params : vals }, e):
+					switch( e.expr ) {
+					case EFunction("vertex", _):
+						consts.vertex = vals;
+						el[i] = e;
+					case EFunction("fragment", _):
+						consts.fragment = vals;
+						el[i] = e;
+					default:
+					}
+				default:
+				}
+		default:
+		}
 		var p = new hxsl.Parser().parse(shader);
 		var c = new hxsl.Compiler();
 		var warnings = [];
@@ -60,6 +104,12 @@ class Main {
 		c.warn = function(msg, p) warnings.push({ msg : msg, p : p });
 		var data = c.compile(p);
 		data = new hxsl.RuntimeCompiler().compile(data, params);
+		
+		if( consts.vertex != null )
+			checkConsts(data.vertex, consts.vertex);
+		if( consts.fragment != null )
+			checkConsts(data.fragment, consts.fragment);
+		
 		var vert = new hxsl.AgalCompiler().compile(data.vertex);
 		var frag = new hxsl.AgalCompiler().compile(data.fragment);
 		var vexpr = { expr : EConst(CString(haxe.Serializer.run(agalToBytes(vert)))), pos : shader.pos };
@@ -71,7 +121,6 @@ class Main {
 	
 	static macro function test( shader : Expr, out : String, ?params : { } ) {
 		var s = null;
-		var consts = [];
 		try {
 			s = compileShader(shader, params);
 		} catch( e : hxsl.Data.Error ) {
@@ -288,6 +337,7 @@ class Main {
 		},"Constant 'unused' not used");
 		
 		test( {
+			@:const([1,0])
 			function vertex() {
 				if( true ) {
 					out.xyz = [1,1,1];
@@ -296,6 +346,7 @@ class Main {
 				}
 				out.w = 0;
 			}
+			@:const([1,2,3,4])
 			function fragment() {
 				out = [1, 2, 3, 4];
 			}
@@ -600,6 +651,69 @@ class Main {
 			
 			mov out, c0.xxxx
 		",{ tmp : [null,null] });
+		
+		
+		// this is correct but underoptimized (loop values takes a full constant each)
+		/*
+		  CONSTS are buggy, look at it later
+		
+		test( {
+			@:const([0])
+			function vertex() {
+				out = [0, 0, 0, 0];
+			}
+			@:const([-1,0,0,0],[0,0,0,0],[1,0,0,0],[0,0,0,0])
+			function fragment(tex:Texture) {
+				var color = [0, 0, 0, 0];
+				for( i in -1...2 )
+					color += tex.get([i, 0]);
+				out = color;
+			}
+		},"
+			mov out, c0.xxxx
+			
+			mov t0, c3.xxxx
+			mov t1.x, c0.x
+			mov t1.y, c3.x
+			tex t2, tex0[t1.xy]
+			add t3, t0, t2
+			mov t4.x, c1.x
+			mov t4.y, c3.x
+			tex t5, tex0[t4.xy]
+			add t6, t3, t5
+			mov t7.x, c2.x
+			mov t7.y, c3.x
+			tex t1, tex0[t7.xy]
+			add t2, t6, t1
+			mov out, t2
+		");
+		*/
+	
+		test({
+			var input : {
+				pos : Float2,
+				rgb : Float3,
+				alpha : Float,
+			};
+
+			var _color :Float4;
+
+			function vertex () {
+				_color.rgb = input.rgb*input.alpha;
+				_color.a = input.alpha;
+				out = input.pos.xyzw;
+			}
+
+			function fragment () {
+				out = _color;
+			}
+		},"
+			mul v0.xyz, a1.xyz, a2.xxx
+			mov v0.w, a2.x
+			mov out, a0.xyzw
+			
+			mov out, v0
+		");
 
 		trace(COUNT+" shaders checked");
 	}

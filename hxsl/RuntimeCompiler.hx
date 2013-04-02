@@ -493,7 +493,18 @@ class RuntimeCompiler {
 		case CFor(vloop, it, exprs):
 			switch( it.d ) {
 			case COp(CInterval, _first, _max):
-				throw "TODO";
+				switch( [compileCond(_first),compileCond(_max)] ) {
+				case [CInt(first), CInt(max)]:
+					var p = props(vloop);
+					for( i in first...max ) {
+						p.value = CInt(i);
+						p.newVar = null;
+						for( e in exprs )
+							compileAssign(e.v, e.e);
+					}
+				default:
+					throw "assert";
+				}
 			default:
 				var vit = compileValue(it);
 				switch( vit.d ) {

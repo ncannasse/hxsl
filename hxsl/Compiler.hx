@@ -526,50 +526,6 @@ class Compiler {
 		case PLocal(v):
 			var v = allocVar(v.n, VTmp, v.t, v.p);
 			return { d : CVar(v), t : v.type, p : e.p };
-		case PSwiz(v, swiz):
-			// special case to restring reading to swiz
-			var v = switch( v.v ) {
-			case PVar(vname):
-				var v = vars.get(vname);
-				if( v == null )
-					error("Unknown variable '" + vname + "'", e.p);
-				{ d : CVar(v, null), t : v.type, p : e.p };
-			default:
-				compileValue(v, isTarget);
-			}
-			// check swizzling according to value type
-			var count = switch( v.t ) {
-			case TMatrix(_), TTexture(_), TArray(_): 0;
-			default: Tools.floatSize(v.t);
-			}
-			// allow all components access on input and varying values only
-			switch( v.d ) {
-			case CVar(v, s), CField({ d : CVar(v,s) },_):
-				if( s == null && count > 0 && (v.kind == VInput || v.kind == VVar) ) count = 4;
-			default:
-			}
-			// check that swizzling is correct
-			for( s in swiz )
-				if( Type.enumIndex(s) >= count )
-					error("Invalid swizzling on " + Tools.typeStr(v.t), e.p);
-			// build swizzling
-			switch( v.d ) {
-			case CVar(v, swiz2):
-				var ns;
-				if( swiz2 == null ) {
-					if( !isTarget )
-						checkReadVar(v, swiz, e.p, isCond);
-					ns = swiz;
-				} else {
-					// combine swizzlings
-					ns = [];
-					for( s in swiz )
-						ns.push(swiz2[Type.enumIndex(s)]);
-				}
-				return { d : CVar(v, ns), t : Tools.makeFloat(swiz.length), p : e.p };
-			default:
-				return { d : CSwiz(v, swiz), t : Tools.makeFloat(swiz.length), p : e.p };
-			}
 		case POp(op, e1, e2):
 			return makeOp(op, e1, e2, e.p, isCond);
 		case PUnop(op, e1):
@@ -702,11 +658,55 @@ class Compiler {
 		case PField(e1, f):
 			var e1 = compileValue(e1, isTarget, isCond);
 			switch( e1.t ) {
+			case TMatrix(_), TTexture(_), TArray(_):
+				// no swizzling
 			case TObject(fields):
 				for( fv in fields )
 					if( fv.name == f )
 						return { d : CField(e1, f), t : fv.t, p : e.p };
 			default:
+				var swiz = [];
+				var chars = "xrygzbwa";
+				for( i in 0...f.length )
+					switch( chars.indexOf(f.charAt(i)) ) {
+					case 0,1: swiz.push(X);
+					case 2,3: swiz.push(Y);
+					case 4,5: swiz.push(Z);
+					case 6,7: swiz.push(W);
+					default: swiz = null; break;
+					}
+				if( swiz != null ) {
+					var v = e1;
+					var count = Tools.floatSize(v.t);
+					// allow all components access on input and varying values only
+					switch( v.d ) {
+					case CVar(v, s), CField({ d : CVar(v,s) },_):
+						if( s == null && count > 0 && (v.kind == VInput || v.kind == VVar) ) count = 4;
+					default:
+					}
+					// check that swizzling is correct
+					for( s in swiz )
+						if( Type.enumIndex(s) >= count )
+							error("Invalid swizzling on " + Tools.typeStr(v.t), e.p);
+					// build swizzling
+					switch( v.d ) {
+					case CVar(v, swiz2):
+						var ns;
+						if( swiz2 == null ) {
+							if( !isTarget )
+								checkReadVar(v, swiz, e.p, isCond);
+							ns = swiz;
+						} else {
+							// combine swizzlings
+							ns = [];
+							for( s in swiz )
+								ns.push(swiz2[Type.enumIndex(s)]);
+						}
+						return { d : CVar(v, ns), t : Tools.makeFloat(swiz.length), p : e.p };
+					default:
+						return { d : CSwiz(v, swiz), t : Tools.makeFloat(swiz.length), p : e.p };
+					}
+				}
 			}
 			return error(Tools.typeStr(e1.t) + " has no field '" + f + "'", e.p);
 		case PIf(_), PFor(_):

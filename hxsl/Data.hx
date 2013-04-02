@@ -197,7 +197,6 @@ enum ParsedValueDecl {
 	POp( op : CodeOp, e1 : ParsedValue, e2 : ParsedValue );
 	PUnop( op : CodeUnop, e : ParsedValue );
 	PTex( v : String, acc : ParsedValue, mode : Array<{ f : ParsedTexFlag, p : Position }> );
-	PSwiz( e : ParsedValue, swiz : Array<Comp> );
 	PIf( cond : ParsedValue, eif : ParsedValue, eelse : ParsedValue );
 	PFor( v : String, iter : ParsedValue, expr:ParsedValue );
 	PCond( cond : ParsedValue, eif : ParsedValue, eelse : ParsedValue ); // inline if statement
