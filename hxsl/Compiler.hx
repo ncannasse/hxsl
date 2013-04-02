@@ -721,10 +721,11 @@ class Compiler {
 			switch( t2 ) {
 			case TMatrix(r2, c2, t2):
 				if( r != r2 || c != c2 ) return false;
-				if( t1.t == null ) {
-					if( t2.t == null ) t2.t = false;
-					t1.t = t2.t;
-					return true;
+				if( t1.t != t2.t ) {
+					if( t1.t == null )
+						t1.t = t2.t;
+					else if( t2.t == null )
+						t2.t = t1.t;
 				}
 				return( t1.t == t2.t );
 			default:
@@ -747,10 +748,10 @@ class Compiler {
 		if( !tryUnify(t1, t2) ) {
 			// if we only have the transpose flag different, let's print a nice error message
 			switch(t1) {
-			case TMatrix(r, c, _):
+			case TMatrix(r, c, t):
 				switch( t2 ) {
-				case TMatrix(r2, c2, t):
-					if( r == r2 && c == c2 && t.t != null ) {
+				case TMatrix(r2, c2, t2):
+					if( r == r2 && c == c2 && t2.t != null ) {
 						if( t.t )
 							error("Matrix is transposed by another operation", p);
 						else
@@ -816,6 +817,13 @@ class Compiler {
 			error("Only constants can be compared to null", e1.p);
 		}
 
+		// special case for matrix multiply
+		switch( [op, e1.t, e2.t] ) {
+		case [CMul, TFloat4, TMatrix(4, 4, { t : false } )]:
+			error("The right matrix must be transposed, please type explicitely as M44T", e2.p);
+		default:
+		}
+		
 		// we have an error, so let's find the most appropriate override
 		// in order to print the most meaningful error message
 		if( first == null )

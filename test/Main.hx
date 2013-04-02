@@ -109,6 +109,9 @@ class Main {
 			checkConsts(data.vertex, consts.vertex);
 		if( consts.fragment != null )
 			checkConsts(data.fragment, consts.fragment);
+			
+		for( v in data.vertex.args )
+			trace(v.name + ":" + v.type);
 		
 		var vert = new hxsl.AgalCompiler().compile(data.vertex);
 		var frag = new hxsl.AgalCompiler().compile(data.fragment);
@@ -713,6 +716,50 @@ class Main {
 			mov out, a0.xyzw
 			
 			mov out, v0
+		");
+		
+		
+		// this is quite highly expended, we might prefer to use m4x4 macros here
+		test( {
+			
+			var pos : Input<Float4>;
+			
+			function vertex( mpos : M44, mproj : M44 ) {
+				var mpp : M44 = mpos * mproj;
+				out = pos.xyzw * mpp;
+			}
+			
+			function fragment() {
+				out = [0, 0, 0, 0];
+			}
+			
+		},"
+			mov t0, c0
+			mov t1, c1
+			mov t2, c2
+			mov t3, c3
+			dp4 t4.x, t0, c4
+			dp4 t4.y, t0, c5
+			dp4 t4.z, t0, c6
+			dp4 t4.w, t0, c7
+			dp4 t5.x, t1, c4
+			dp4 t5.y, t1, c5
+			dp4 t5.z, t1, c6
+			dp4 t5.w, t1, c7
+			dp4 t6.x, t2, c4
+			dp4 t6.y, t2, c5
+			dp4 t6.z, t2, c6
+			dp4 t6.w, t2, c7
+			dp4 t7.x, t3, c4
+			dp4 t7.y, t3, c5
+			dp4 t7.z, t3, c6
+			dp4 t7.w, t3, c7
+			dp4 out.x, a0.xyzw, t4
+			dp4 out.y, a0.xyzw, t5
+			dp4 out.z, a0.xyzw, t6
+			dp4 out.w, a0.xyzw, t7
+			
+			mov out, c0.xxxx
 		");
 
 		trace(COUNT+" shaders checked");
