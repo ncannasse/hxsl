@@ -320,7 +320,7 @@ class Shader {
 		return new ShaderTypes.Vector();
 	}
 
-	inline function makeArray(size) {
+	inline function makeArray<T>(size) : ShaderTypes.FixedArray<T,0> {
 		return new ShaderTypes.FixedArray();
 	}
 
