@@ -110,9 +110,6 @@ class Main {
 		if( consts.fragment != null )
 			checkConsts(data.fragment, consts.fragment);
 			
-		for( v in data.vertex.args )
-			trace(v.name + ":" + v.type);
-		
 		var vert = new hxsl.AgalCompiler().compile(data.vertex);
 		var frag = new hxsl.AgalCompiler().compile(data.fragment);
 		var vexpr = { expr : EConst(CString(haxe.Serializer.run(agalToBytes(vert)))), pos : shader.pos };
@@ -720,6 +717,7 @@ class Main {
 		
 		
 		// this is quite highly expended, we might prefer to use m4x4 macros here
+		/*
 		test( {
 			
 			var pos : Input<Float4>;
@@ -761,6 +759,7 @@ class Main {
 			
 			mov out, c0.xxxx
 		");
+	*/
 
 		trace(COUNT+" shaders checked");
 	}
