@@ -289,6 +289,7 @@ class Shader {
 	var modified : Bool;
 	var paramBits : Int;
 	var paramLengths : Array<Array<Int>>;
+	var paramLengthsModified : Bool;
 	var paramVectors : Array<ShaderTypes.Vector>;
 	var paramMatrixes : Array<ShaderTypes.Matrix>;
 	var paramObjects : Array<Dynamic>;
@@ -306,7 +307,10 @@ class Shader {
 		if( globals.hasParamVector ) paramVectors = [];
 		if( globals.hasParamMatrix ) paramMatrixes = [];
 		if( globals.hasParamObject ) paramObjects = [];
-		if( globals.hasParamLengths ) paramLengths = [];
+		if( globals.hasParamLengths ) {
+			paramLengths = [];
+			paramLengthsModified = true;
+		}
 		shaderId = ID++;
 	}
 	
@@ -325,8 +329,10 @@ class Shader {
 	}
 
 	public function getInstance() : ShaderInstance {
-		if( instance == null || instance.bits != paramBits || (instance.lengths != null && Std.string(instance.lengths) != Std.string(paramLengths)) )
+		if( instance == null || instance.bits != paramBits || (paramLengthsModified && instance.lengths != null && Std.string(instance.lengths) != Std.string(paramLengths)) ) {
+			paramLengthsModified = false;
 			instance = globals.getInstance(paramBits, paramLengths);
+		}
 		if( modified || instance.curShaderId != shaderId ) {
 			updateParams();
 			modified = false;
