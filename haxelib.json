@@ -1,0 +1,10 @@
+{
+	"name" : "hxsl",
+	"url" : "http://haxe.org/manual/hxsl",
+	"license" : "BSD",
+    "description" : "HxSL : Haxe high level shader library",
+	"contributors" : ["ncannasse"],
+	"dependencies" : { "format" : "" },
+    "version" : "2.0.0",
+	"releasenote" : "New version with runtime compiler constants"
+}

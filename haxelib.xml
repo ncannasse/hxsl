@@ -1,8 +1,0 @@
-<project name="hxsl" url="http://haxe.org/manual/hxsl" license="BSD">
-    <user name="ncannasse"/>
-    <tag v="flash"/>
-	<tag v="3d"/>
-	<depends name="format"/>
-    <description>HxSL : Haxe high level shader library</description>
-    <version name="2.0">New version with runtime compiler constants</version>
-</project>
