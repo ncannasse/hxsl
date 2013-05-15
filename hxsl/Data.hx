@@ -34,6 +34,10 @@ enum TexFlag {
 	TFilterNearest;
 	TFilterLinear; // default
 	TSingle;
+	TIgnoreSampler;
+	TTypeRgba;
+	TTypeDxt1;
+	TTypeDxt5;
 	TLodBias( v : Float );
 }
 
@@ -43,6 +47,8 @@ enum TexParam {
 	PFilter;
 	PLodBias;
 	PSingle;
+	PIgnoreSampler;
+	PType;
 }
 
 enum Comp {

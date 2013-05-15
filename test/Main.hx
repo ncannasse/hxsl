@@ -716,6 +716,31 @@ class Main {
 		");
 		
 		
+		test({
+			var input : {
+				pos : Float2,
+				uv : Float2,
+			};
+
+			var tuv : Float2;
+
+			function vertex () {
+				out = input.pos.xyzw;
+				tuv = input.uv;
+			}
+
+			function fragment( t : Texture ) {
+				out = t.get(tuv,dxt1,ignore_sampler);
+			}
+		},"
+			mov out, a0.xyzw
+			mov v0, a1
+			
+			tex t0, tex0[v0.xy] <TDxt1,TIgnoreSampler>
+			mov out, t0
+		");
+		
+		
 		// this is quite highly expended, we might prefer to use m4x4 macros here
 		/*
 		test( {

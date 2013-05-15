@@ -786,6 +786,17 @@ class RuntimeCompiler {
 						}
 					case PSingle:
 						if( isTrue(c) ) flags.push(TSingle);
+					case PIgnoreSampler:
+						if( isTrue(c) ) flags.push(TIgnoreSampler);
+					case PType:
+						var idx = switch( c ) {
+						case CNull: 0;
+						case CInt(i): i;
+						case CFloat(f): Std.int(f);
+						default: throw "assert";
+						}
+						if( idx > 0 )
+							flags.push([TTypeDxt1, TTypeDxt5][idx - 1]);
 					}
 				}
 			var mode = [];

@@ -548,6 +548,8 @@ class Compiler {
 					case TWrap, TClamp: PWrap;
 					case TFilterLinear, TFilterNearest: PFilter;
 					case TSingle: single = true; PSingle;
+					case TTypeRgba, TTypeDxt1, TTypeDxt5: PType;
+					case TIgnoreSampler: PIgnoreSampler;
 					case TLodBias(_): PLodBias;
 					}
 					tflags.push( { f : CTFlag(fl), p : f.p } );
@@ -555,8 +557,8 @@ class Compiler {
 					var v = compileValue(v, false, true);
 					param = p;
 					var t = switch( p ) {
-					case PLodBias: TFloat;
-					case PMipMap, PSingle, PWrap, PFilter: TBool;
+					case PLodBias, PType: TFloat;
+					case PMipMap, PSingle, PWrap, PFilter, PIgnoreSampler: TBool;
 					}
 					unify(v.t, t, v.p);
 					tflags.push( { f : CTParam(p, v), p : f.p } );
