@@ -729,8 +729,10 @@ class Main {
 				tuv = input.uv;
 			}
 
+			var texType : Param<Float>;
+			
 			function fragment( t : Texture ) {
-				out = t.get(tuv,dxt1,ignore_sampler);
+				out = t.get(tuv,type=texType,ignore_sampler);
 			}
 		},"
 			mov out, a0.xyzw
@@ -738,7 +740,7 @@ class Main {
 			
 			tex t0, tex0[v0.xy] <TDxt1,TIgnoreSampler>
 			mov out, t0
-		");
+		", { texType : 1 });
 		
 		
 		// this is quite highly expended, we might prefer to use m4x4 macros here
