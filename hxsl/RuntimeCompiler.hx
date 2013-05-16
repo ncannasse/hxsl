@@ -61,12 +61,13 @@ class RuntimeCompiler {
 	var cur : Code;
 	var defPos : Position;
 
-	public var config : { padWrites : Bool };
+	public var config : { padWrites : Bool, defaultIgnoreSampler : Bool };
 	
 	public function new() {
 		varId = 0;
 		config = {
 			padWrites : true,
+			defaultIgnoreSampler : false,
 		};
 	}
 	
@@ -801,7 +802,9 @@ class RuntimeCompiler {
 				}
 			var mode = [];
 			for( f in flags )
-				mode.push({ f : CTFlag(f), p : e.p });
+				mode.push( { f : CTFlag(f), p : e.p } );
+			if( config.defaultIgnoreSampler && flags.length == 0 )
+				flags.push(TIgnoreSampler);
 			CTex(v, acc, mode);
 		case CCond(c, eif, eelse):
 			if( isTrue(compileCond(c)) )
