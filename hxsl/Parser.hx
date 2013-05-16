@@ -470,7 +470,7 @@ class Parser {
 			};
 			var t = parseValue(params.shift());
 			var flags = [];
-			var idents = ["mm_no","mm_near","mm_linear","wrap","clamp","nearest","linear","single","rgba","dxt1","dxt5","ignore_sampler"];
+			var idents = ["mm_no","mm_nearest","mm_linear","wrap","clamp","nearest","linear","single","rgba","dxt1","dxt5","ignore_sampler"];
 			var values = [TMipMapDisable,TMipMapNearest,TMipMapLinear,TWrap,TClamp,TFilterNearest,TFilterLinear,TSingle,TTypeRgba,TTypeDxt1,TTypeDxt5,TIgnoreSampler];
 			var targets = ["mipmap", "wrap", "filter", "lod", "ignore_sampler", "type"];
 			var targetValues = [PMipMap, PWrap, PFilter, PLodBias, PIgnoreSampler, PType];
