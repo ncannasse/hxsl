@@ -61,14 +61,16 @@ class RuntimeCompiler {
 	var cur : Code;
 	var defPos : Position;
 
+	public static var DEFAULT_CONFIG = {
+		padWrites : true,
+		defaultIgnoreSampler : false,
+	};
+	
 	public var config : { padWrites : Bool, defaultIgnoreSampler : Bool };
 	
 	public function new() {
 		varId = 0;
-		config = {
-			padWrites : true,
-			defaultIgnoreSampler : false,
-		};
+		config = DEFAULT_CONFIG;
 	}
 	
 	function error( msg : String, pos : Position ) : Dynamic {
