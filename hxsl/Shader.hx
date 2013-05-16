@@ -48,6 +48,7 @@ class ShaderInstance {
 	public var vertexMap : Vector<Int>;
 	public var fragmentMap : Vector<Int>;
 	public var textureMap : Vector<Int>;
+	public var texHasConfig : Vector<Bool>;
 	
 	public var vertexBytes : haxe.io.Bytes;
 	public var fragmentBytes : haxe.io.Bytes;
@@ -82,6 +83,7 @@ class ShaderGlobals {
 	public var hasParamObject : Bool;
 	public var hasParamLengths : Bool;
 
+	var texHasConfig : Vector<Bool>;
 	var constCount : Int;
 	var instances : Map<String,ShaderInstance>;
 	var hparams : Map<Int,hxsl.Data.Variable>;
@@ -129,9 +131,40 @@ class ShaderGlobals {
 			default:
 			}
 		
+		texHasConfig = new Vector(texSize);
+		Tools.iterBlock(data.fragment.exprs, lookupTextureAccess);
+		
 		instances = new Map();
 		ALL.push(this);
 	}
+	
+	function lookupTextureAccess( v : CodeValue ) {
+		switch( v.d ) {
+		case CTex(v, _, mode):
+			var hasConfig = false, hasSampler = false;
+			for( m in mode )
+				switch( m.f ) {
+				case CTFlag(TTypeDxt1 | TTypeDxt5 | TTypeRgba | TSingle), CTParam(PType, _), CTParam(PSingle, _):
+				case CTFlag(TIgnoreSampler):
+					hasSampler = true;
+					hasConfig = false;
+					break;
+				case CTParam(PIgnoreSampler, _):
+					hasSampler = true;
+					hasConfig = true;
+				default:
+					hasConfig = true;
+				}
+			if( hasConfig )
+				texHasConfig[v.index] = true;
+			else if( !hasSampler )
+				mode.push({ f : CTFlag(TIgnoreSampler), p : v.pos });
+		default:
+		}
+		Tools.iter(v, lookupTextureAccess);
+	}
+	
+	
 	
 	function build( code : hxsl.Data.Code ) {
 			
@@ -229,6 +262,7 @@ class ShaderGlobals {
 			}
 		i.textureMap = Vector.fromArrayCopy(tmap);
 		i.textures = new Vector(i.textureMap.length);
+		i.texHasConfig = texHasConfig;
 		
 		i.bufferFormat = 0;
 		i.bufferNames = [];
