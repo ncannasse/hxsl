@@ -157,8 +157,11 @@ class ShaderGlobals {
 				}
 			if( hasConfig )
 				texHasConfig[v.index] = true;
+			#if !advanced_telemetry
+			// disable using TIgnoreSampler until Adobe Scout supports it
 			else if( !hasSampler )
-				mode.push({ f : CTFlag(TIgnoreSampler), p : v.pos });
+				mode.push( { f : CTFlag(TIgnoreSampler), p : v.pos } );
+			#end
 		default:
 		}
 		Tools.iter(v, lookupTextureAccess);
