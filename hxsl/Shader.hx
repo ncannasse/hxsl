@@ -63,8 +63,6 @@ class ShaderInstance {
 		if( program != null ) {
 			program.dispose();
 			program = null;
-			if( lengths == null ) lengths = [];
-			lengths[0] = [-1]; // invalid value to force reload
 		}
 	}
 	
@@ -305,11 +303,16 @@ class ShaderGlobals {
 		return i;
 	}
 	
-	public static function disposeAll() {
+	public static function disposeAll( andCleanCache = false ) {
 		for( g in ALL ) {
-			for( i in g.instances )
+			for( i in g.instances ) {			
 				i.dispose();
-			g.instances = new Map();
+				// this will force every getInstance() to lookup for a new one
+				if( andCleanCache )
+					i.bits++;
+			}
+			if( andCleanCache )
+				g.instances = new Map();
 		}
 	}
 	
