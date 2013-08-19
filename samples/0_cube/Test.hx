@@ -10,8 +10,8 @@ class Shader extends hxsl.Shader {
 		};
 		var color : Float3;
 		function vertex( mpos : M44, mproj : M44 ) {
-			out = pos.xyzw * mpos * mproj;
-			color = pos;
+			out = input.pos.xyzw * mpos * mproj;
+			color = input.pos;
 		}
 		function fragment() {
 			out = color.xyzw;
@@ -38,8 +38,8 @@ class Test {
 		stage = flash.Lib.current.stage;
 		s = stage.stage3Ds[0];
 		s.addEventListener( flash.events.Event.CONTEXT3D_CREATE, onReady );
-		stage.addEventListener( flash.events.KeyboardEvent.KEY_DOWN, callback(onKey,true) );
-		stage.addEventListener( flash.events.KeyboardEvent.KEY_UP, callback(onKey,false) );
+		stage.addEventListener( flash.events.KeyboardEvent.KEY_DOWN, onKey.bind(true) );
+		stage.addEventListener( flash.events.KeyboardEvent.KEY_UP, onKey.bind(false) );
 		flash.Lib.current.addEventListener(flash.events.Event.ENTER_FRAME, update);
 		s.requestContext3D();
 	}
