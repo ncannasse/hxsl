@@ -86,7 +86,7 @@ class ShaderGlobals {
 	var instances : Map<String,ShaderInstance>;
 	var hparams : Map<Int,hxsl.Data.Variable>;
 	
-	static var ALL = new Array();
+	static var ALL = new Array<ShaderGlobals>();
 	
 	public function new( hxStr : String ) {
 		this.data = hxsl.Unserialize.unserialize(hxStr);
@@ -305,7 +305,7 @@ class ShaderGlobals {
 	
 	public static function disposeAll( andCleanCache = false ) {
 		for( g in ALL ) {
-			for( i in g.instances ) {			
+			for( i in g.instances ) {
 				i.dispose();
 				// this will force every getInstance() to lookup for a new one
 				if( andCleanCache )
