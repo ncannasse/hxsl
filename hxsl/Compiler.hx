@@ -661,7 +661,13 @@ class Compiler {
 		case PField(e1, f):
 			var e1 = compileValue(e1, isTarget, isCond);
 			switch( e1.t ) {
-			case TMatrix(_), TTexture(_), TArray(_):
+			case TMatrix(r, c, t):
+				switch( f ) {
+				case "m33" if( r >= 3 && c >= 3):
+					return { d : e1.d, t : TMatrix(3, 3, t), p : e.p };
+				default:
+				}
+			case TTexture(_), TArray(_):
 				// no swizzling
 			case TObject(fields):
 				for( fv in fields )
