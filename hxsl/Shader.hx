@@ -368,8 +368,25 @@ class Shader {
 		return new ShaderTypes.FixedArray();
 	}
 
+	function arrayDiffer( a : Array<Dynamic>, b : Array<Dynamic> ) {
+		if( a.length != b.length )
+			return true;
+		for( i in 0...a.length ) {
+			var x = a[i];
+			var y = a[i];
+			if( x != y ) {
+				var ax = Std.instance(x, Array);
+				if( ax == null ) return true;
+				var ay = Std.instance(y, Array);
+				if( ay == null ) return true;
+				return arrayDiffer(ax, ay);
+			}
+		}
+		return false;
+	}
+	
 	public function getInstance() : ShaderInstance {
-		if( instance == null || instance.bits != paramBits || (paramLengthsModified && instance.lengths != null && Std.string(instance.lengths) != Std.string(paramLengths)) ) {
+		if( instance == null || instance.bits != paramBits || (paramLengthsModified && instance.lengths != null && arrayDiffer(instance.lengths,paramLengths)) ) {
 			paramLengthsModified = false;
 			instance = globals.getInstance(paramBits, paramLengths);
 		}
