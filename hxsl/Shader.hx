@@ -95,6 +95,7 @@ class ShaderGlobals {
 			switch( t ) {
 			case TNull, TFloat, TBool, TInt, TTexture(_),TFloat2, TFloat3, TFloat4, TMatrix(_):
 			case TArray(t, 0): hasParamLengths = true; checkSubType(t);
+			case TArray(t, _): checkSubType(t);
 			case TObject(fields):
 				for( f in fields )
 					checkSubType(f.t);
