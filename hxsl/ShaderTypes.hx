@@ -27,8 +27,9 @@ package hxsl;
 typedef Texture = h3d.mat.Texture;
 typedef Vector = h3d.Vector;
 typedef Matrix = h3d.Matrix;
-#elseif tilezeit
-typedef Texture = at.dotpoint.tilezeit.entity.model.material.Texture;
+#elseif dotpoint
+//typedef Texture = at.dotpoint.dot3d.model.material.Texture;
+typedef Texture = flash.display3D.textures.TextureBase;
 typedef Vector = at.dotpoint.core.math.Vector3;
 typedef Matrix = at.dotpoint.core.math.Matrix44;
 #else

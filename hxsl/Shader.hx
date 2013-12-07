@@ -331,7 +331,7 @@ class Shader {
 	#end
 	
 	
-	#if (!h3d && !tilezeit)
+	#if (!h3d && !dotpoint)
 	
 	public function bind( ctx : flash.display3D.Context3D, buffer : flash.display3D.VertexBuffer3D ) {
 		var i = getInstance();
@@ -449,7 +449,7 @@ class Shader {
 					}
 				}
 			}
-			#elseif tilezeit
+			#elseif dotpoint
 			params[index++] = m.m11;
 			if( c > 1 ) params[index++] = m.m21;
 			if( c > 2 ) params[index++] = m.m31;
@@ -536,7 +536,7 @@ class Shader {
 					}
 				}
 			}
-			#elseif tilezeit
+			#elseif dotpoint
 			params[index++] = m.m11;
 			if( c > 1 ) params[index++] = m.m12;
 			if( c > 2 ) params[index++] = m.m13;
