@@ -87,6 +87,8 @@ class ShaderGlobals {
 			case TObject(fields):
 				for( f in fields )
 					checkSubType(f.t);
+			default:
+				throw "what?";
 			}
 		}
 		
