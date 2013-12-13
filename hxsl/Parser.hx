@@ -346,19 +346,7 @@ class Parser {
 	function parseValue( e : Expr ) : ParsedValue {
 		switch( e.expr ) {
 		case EField(ef, s):
-			var v = parseValue(ef);
-			var chars = "xrygzbwa";
-			var swiz = [];
-			for( i in 0...s.length )
-				switch( chars.indexOf(s.charAt(i)) ) {
-				case 0,1: swiz.push(X);
-				case 2,3: swiz.push(Y);
-				case 4,5: swiz.push(Z);
-				case 6,7: swiz.push(W);
-				default:
-					return { v : PField(v,s), p : e.pos };
-				}
-			return { v : PSwiz(v,swiz), p : e.pos };
+			return { v : PField(parseValue(ef),s), p : e.pos };
 		case EConst(c):
 			switch( c ) {
 			case CIdent(i) #if !haxe3 , CType(i) #end:
@@ -380,29 +368,32 @@ class Parser {
 			}
 		case EBinop(op, e1, e2):
 			var op = switch( op ) {
-			case OpMult: "mul";
-			case OpAdd: "add";
-			case OpDiv: "div";
-			case OpSub: "sub";
-			case OpLt: "lt";
-			case OpLte: "lte";
-			case OpGt: "gt";
-			case OpEq: "eq";
-			case OpNotEq: "neq";
-			case OpGte: "gte";
-			case OpMod: "mod";
-			case OpBoolOr: "or";
-			case OpBoolAnd: "and";
+			case OpMult: CMul;
+			case OpAdd: CAdd;
+			case OpDiv: CDiv;
+			case OpSub: CSub;
+			case OpLt: CLt;
+			case OpLte: CLte;
+			case OpGt: CGt;
+			case OpEq: CEq;
+			case OpNotEq: CNeq;
+			case OpGte: CGte;
+			case OpMod: CMod;
+			case OpBoolOr: COr;
+			case OpBoolAnd: CAnd;
+			case OpInterval: CInterval;
 			default: error("Unsupported operation", e.pos);
 			};
-			return makeCall(op, [e1, e2], e.pos);
+			return { v : POp(op, parseValue(e1), parseValue(e2)), p : e.pos };
+		case EUnop(OpNeg, _, { expr : EConst(CInt(v)) } ):
+			return { v : PConst(CInt(-Std.parseInt(v))), p : e.pos };
 		case EUnop(op, _, e1):
 			var op = switch( op ) {
-			case OpNeg: "neg";
-			case OpNot: "not";
+			case OpNeg: CNeg;
+			case OpNot: CNot;
 			default: error("Unsupported operation", e.pos);
 			}
-			return makeCall(op, [e1], e.pos);
+			return { v : PUnop(op,parseValue(e1)), p : e.pos };
 		case ECall(c, params):
 			switch( c.expr ) {
 			case EField(v, f):
@@ -479,60 +470,30 @@ class Parser {
 			};
 			var t = parseValue(params.shift());
 			var flags = [];
-			var idents = ["mm_no","mm_near","mm_linear","wrap","clamp","nearest","linear","single"];
-			var values = [TMipMapDisable,TMipMapNearest,TMipMapLinear,TWrap,TClamp,TFilterNearest,TFilterLinear,TSingle];
-			var targets = ["mipmap", "wrap", "filter", "lod"];
-			var targetValues = [PMipMap, PWrap, PFilter, PLodBias];
+			var idents = ["mm_no","mm_nearest","mm_linear","wrap","clamp","nearest","linear","single","rgba","dxt1","dxt5","ignore_sampler"];
+			var values = [TMipMapDisable,TMipMapNearest,TMipMapLinear,TWrap,TClamp,TFilterNearest,TFilterLinear,TSingle,TTypeRgba,TTypeDxt1,TTypeDxt5,TIgnoreSampler];
+			var targets = ["mipmap", "wrap", "filter", "lod", "ignore_sampler", "type"];
+			var targetValues = [PMipMap, PWrap, PFilter, PLodBias, PIgnoreSampler, PType];
 			for( p in params ) {
 				switch( p.expr ) {
-				case EBinop(op, e1, e2):
-					switch ( op ) {
-					case OpAssign:
-						switch (e1.expr) {
-						case EConst(c):
-							switch (c) {
-							case CIdent(sflag):
-								var ip = Lambda.indexOf(targets, sflag);
-								if ( ip >= 0 ) {
-									flags.push({ f : PTParam(targetValues[ip],parseValue(e2)), p : p.pos });
-									continue;
-								}
-								error("Invalid parameter, should be "+targets.join("|"), p.pos);
-							default:
-							}
-						default: error("Invalid syntax for texture get", p.pos);
-						}
-					default: error("Invalid syntax for texture get", p.pos);
+				case EBinop(OpAssign, { expr : EConst(CIdent(sflag)), pos : fpos }, e2):
+					var ip = Lambda.indexOf(targets, sflag);
+					if( ip >= 0 ) {
+						flags.push({ f : PTParam(targetValues[ip],parseValue(e2)), p : p.pos });
+						continue;
 					}
-				case EConst(c):
+					error("Invalid parameter, should be "+targets.join("|"), fpos);
+				case EConst(CIdent(sflag)):
+					var ip = Lambda.indexOf(idents, sflag);
+					if( ip >= 0 ) {
+						flags.push({ f : PTFlag(values[ip]), p : p.pos });
+						continue;
+					}
+				case ECall({ expr : EConst(CIdent("lod")) }, [{ expr : EConst(c) }]):
 					switch( c ) {
-					case CIdent(sflag):
-						var ip = Lambda.indexOf(idents, sflag);
-						if( ip >= 0 ) {
-							flags.push({ f : PTFlag(values[ip]), p : p.pos });
-							continue;
-						}
-					default:
-					}
-				case ECall(c,pl):
-					switch( c.expr ) {
-					case EConst(c):
-						switch( c ) {
-						case CIdent(v):
-							if( v == "lod" && pl.length == 1 ) {
-								switch( pl[0].expr ) {
-								case EConst(c):
-									switch( c ) {
-									case CInt(v), CFloat(v):
-										flags.push({ f : PTFlag(TLodBias(Std.parseFloat(v))), p : p.pos });
-										continue;
-									default:
-									}
-								default:
-								}
-							}
-						default:
-						}
+					case CInt(v), CFloat(v):
+						flags.push({ f : PTFlag(TLodBias(Std.parseFloat(v))), p : p.pos });
+						continue;
 					default:
 					}
 				default:

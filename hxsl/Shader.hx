@@ -48,6 +48,7 @@ class ShaderInstance {
 	public var vertexMap : Vector<Int>;
 	public var fragmentMap : Vector<Int>;
 	public var textureMap : Vector<Int>;
+	public var texHasConfig : Vector<Bool>;
 	
 	public var vertexBytes : haxe.io.Bytes;
 	public var fragmentBytes : haxe.io.Bytes;
@@ -56,6 +57,13 @@ class ShaderInstance {
 	
 	public function new() {
 		curShaderId = -1;
+	}
+	
+	public function dispose() {
+		if( program != null ) {
+			program.dispose();
+			program = null;
+		}
 	}
 	
 }
@@ -73,9 +81,12 @@ class ShaderGlobals {
 	public var hasParamObject : Bool;
 	public var hasParamLengths : Bool;
 
+	var texHasConfig : Vector<Bool>;
 	var constCount : Int;
 	var instances : Map<String,ShaderInstance>;
 	var hparams : Map<Int,hxsl.Data.Variable>;
+	
+	static var ALL = new Array<ShaderGlobals>();
 	
 	public function new( hxStr : String ) {
 		this.data = hxsl.Unserialize.unserialize(hxStr);
@@ -84,6 +95,7 @@ class ShaderGlobals {
 			switch( t ) {
 			case TNull, TFloat, TBool, TInt, TTexture(_),TFloat2, TFloat3, TFloat4, TMatrix(_):
 			case TArray(t, 0): hasParamLengths = true; checkSubType(t);
+			case TArray(t, _): checkSubType(t);
 			case TObject(fields):
 				for( f in fields )
 					checkSubType(f.t);
@@ -120,8 +132,43 @@ class ShaderGlobals {
 			default:
 			}
 		
+		texHasConfig = new Vector(texSize);
+		Tools.iterBlock(data.fragment.exprs, lookupTextureAccess);
+		
 		instances = new Map();
+		ALL.push(this);
 	}
+	
+	function lookupTextureAccess( v : CodeValue ) {
+		switch( v.d ) {
+		case CTex(v, _, mode):
+			var hasConfig = false, hasSampler = false;
+			for( m in mode )
+				switch( m.f ) {
+				case CTFlag(TTypeDxt1 | TTypeDxt5 | TTypeRgba | TSingle), CTParam(PType, _), CTParam(PSingle, _):
+				case CTFlag(TIgnoreSampler):
+					hasSampler = true;
+					hasConfig = false;
+					break;
+				case CTParam(PIgnoreSampler, _):
+					hasSampler = true;
+					hasConfig = true;
+				default:
+					hasConfig = true;
+				}
+			if( hasConfig )
+				texHasConfig[v.index] = true;
+			#if !advanced_telemetry
+			// disable using TIgnoreSampler until Adobe Scout supports it
+			else if( !hasSampler )
+				mode.push( { f : CTFlag(TIgnoreSampler), p : v.pos } );
+			#end
+		default:
+		}
+		Tools.iter(v, lookupTextureAccess);
+	}
+	
+	
 	
 	function build( code : hxsl.Data.Code ) {
 			
@@ -219,6 +266,7 @@ class ShaderGlobals {
 			}
 		i.textureMap = Vector.fromArrayCopy(tmap);
 		i.textures = new Vector(i.textureMap.length);
+		i.texHasConfig = texHasConfig;
 		
 		i.bufferFormat = 0;
 		i.bufferNames = [];
@@ -258,6 +306,19 @@ class ShaderGlobals {
 		return i;
 	}
 	
+	public static function disposeAll( andCleanCache = false ) {
+		for( g in ALL ) {
+			for( i in g.instances ) {
+				i.dispose();
+				// this will force every getInstance() to lookup for a new one
+				if( andCleanCache )
+					i.bits++;
+			}
+			if( andCleanCache )
+				g.instances = new Map();
+		}
+	}
+	
 }
 
 
@@ -271,6 +332,7 @@ class Shader {
 	var modified : Bool;
 	var paramBits : Int;
 	var paramLengths : Array<Array<Int>>;
+	var paramLengthsModified : Bool;
 	var paramVectors : Array<ShaderTypes.Vector>;
 	var paramMatrixes : Array<ShaderTypes.Matrix>;
 	var paramObjects : Array<Dynamic>;
@@ -288,7 +350,10 @@ class Shader {
 		if( globals.hasParamVector ) paramVectors = [];
 		if( globals.hasParamMatrix ) paramMatrixes = [];
 		if( globals.hasParamObject ) paramObjects = [];
-		if( globals.hasParamLengths ) paramLengths = [];
+		if( globals.hasParamLengths ) {
+			paramLengths = [];
+			paramLengthsModified = true;
+		}
 		shaderId = ID++;
 	}
 	
@@ -302,13 +367,32 @@ class Shader {
 		return new ShaderTypes.Vector();
 	}
 
-	inline function makeArray(size) {
+	inline function makeArray<T>(size) : ShaderTypes.FixedArray<T,0> {
 		return new ShaderTypes.FixedArray();
 	}
 
+	function arrayDiffer( a : Array<Dynamic>, b : Array<Dynamic> ) {
+		if( a.length != b.length )
+			return true;
+		for( i in 0...a.length ) {
+			var x = a[i];
+			var y = a[i];
+			if( x != y ) {
+				var ax = Std.instance(x, Array);
+				if( ax == null ) return true;
+				var ay = Std.instance(y, Array);
+				if( ay == null ) return true;
+				return arrayDiffer(ax, ay);
+			}
+		}
+		return false;
+	}
+	
 	public function getInstance() : ShaderInstance {
-		if( instance == null || instance.bits != paramBits || (instance.lengths != null && Std.string(instance.lengths) != Std.string(paramLengths)) )
+		if( instance == null || instance.bits != paramBits || (paramLengthsModified && instance.lengths != null && arrayDiffer(instance.lengths,paramLengths)) ) {
+			paramLengthsModified = false;
 			instance = globals.getInstance(paramBits, paramLengths);
+		}
 		if( modified || instance.curShaderId != shaderId ) {
 			updateParams();
 			modified = false;

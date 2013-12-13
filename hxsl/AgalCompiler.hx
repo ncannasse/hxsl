@@ -713,7 +713,6 @@ class AgalCompiler {
 			for( f in flags )
 				switch( f.f ) {
 				case CTFlag(f):
-					if( f == TSingle ) continue;
 					tflags.push(switch(f) {
 					case TMipMapDisable: TMipMapDisable;
 					case TMipMapNearest: TMipMapNearest;
@@ -722,8 +721,12 @@ class AgalCompiler {
 					case TClamp: TClamp;
 					case TFilterNearest: TFilterNearest;
 					case TFilterLinear: TFilterLinear;
+					case TIgnoreSampler: TIgnoreSampler;
+					case TTypeDxt1: TDxt1;
+					case TTypeDxt5: TDxt5;
+					case TTypeRgba: TRgba;
 					case TLodBias(v): TLodBias(v);
-					case TSingle: null;
+					case TSingle: TSingle;
 					});
 				case CTParam(_):
 					throw "asset";

@@ -15,10 +15,10 @@ class Shader extends hxsl.Shader {
 		var tuv : Float2;
 		var lpow : Float;
 		function vertex( mpos : M44, mproj : M44, light : Float3 ) {
-			out = pos.xyzw * mpos * mproj;
-			var tnorm = (norm * mpos).normalize();
+			out = input.pos.xyzw * mpos * mproj;
+			var tnorm = (input.norm * mpos).normalize();
 			lpow = light.dot(tnorm).max(0);
-			tuv = uv;
+			tuv = input.uv;
 		}
 		function fragment( tex : Texture ) {
 			out = tex.get(tuv) * (lpow * 0.8 + 0.2);
@@ -46,8 +46,8 @@ class Test {
 		stage = flash.Lib.current.stage;
 		s = stage.stage3Ds[0];
 		s.addEventListener( flash.events.Event.CONTEXT3D_CREATE, onReady );
-		stage.addEventListener( flash.events.KeyboardEvent.KEY_DOWN, callback(onKey,true) );
-		stage.addEventListener( flash.events.KeyboardEvent.KEY_UP, callback(onKey,false) );
+		stage.addEventListener( flash.events.KeyboardEvent.KEY_DOWN, onKey.bind(true) );
+		stage.addEventListener( flash.events.KeyboardEvent.KEY_UP, onKey.bind(false) );
 		flash.Lib.current.addEventListener(flash.events.Event.ENTER_FRAME, update);
 		s.requestContext3D();
 	}
@@ -121,4 +121,4 @@ class Test {
 		var inst = new Test();
 	}
 
-}
+}

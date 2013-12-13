@@ -34,6 +34,10 @@ enum TexFlag {
 	TFilterNearest;
 	TFilterLinear; // default
 	TSingle;
+	TIgnoreSampler;
+	TTypeRgba;
+	TTypeDxt1;
+	TTypeDxt5;
 	TLodBias( v : Float );
 }
 
@@ -43,6 +47,8 @@ enum TexParam {
 	PFilter;
 	PLodBias;
 	PSingle;
+	PIgnoreSampler;
+	PType;
 }
 
 enum Comp {
@@ -197,7 +203,6 @@ enum ParsedValueDecl {
 	POp( op : CodeOp, e1 : ParsedValue, e2 : ParsedValue );
 	PUnop( op : CodeUnop, e : ParsedValue );
 	PTex( v : String, acc : ParsedValue, mode : Array<{ f : ParsedTexFlag, p : Position }> );
-	PSwiz( e : ParsedValue, swiz : Array<Comp> );
 	PIf( cond : ParsedValue, eif : ParsedValue, eelse : ParsedValue );
 	PFor( v : String, iter : ParsedValue, expr:ParsedValue );
 	PCond( cond : ParsedValue, eif : ParsedValue, eelse : ParsedValue ); // inline if statement
@@ -332,6 +337,57 @@ class Tools {
 			case 4: TFloat4;
 			default: throw "assert";
 		};
+	}
+	
+	public static function iter( v : CodeValue, f : CodeValue -> Void ) {
+		switch( v.d ) {
+		case CVar(_), CConst(_):
+		case COp(_, e1, e2):
+			f(e1);
+			f(e2);
+		case CUnop(_, e):
+			f(e);
+		case CAccess(_, idx):
+			f(idx);
+		case CTex(_, acc, mode):
+			f(acc);
+			for( m in mode )
+				switch( m.f ) {
+				case CTFlag(_):
+				case CTParam(_, v): f(v);
+				}
+		case CSwiz(e, _):
+			f(e);
+		case CSubBlock(tmp, v):
+			iterBlock(tmp,f);
+			f(v);
+		case CIf(c, eif, eelse):
+			f(c);
+			iterBlock(eif, f);
+			if( eelse != null ) iterBlock(eelse, f);
+		case CCond(c, e1, e2):
+			f(c);
+			f(e1);
+			f(e2);
+		case CFor(_, it, e):
+			f(it);
+			iterBlock(e, f);
+		case CVector(vals):
+			for( v in vals )
+				f(v);
+		case CRow(e1, e2):
+			f(e1);
+			f(e2);
+		case CField(e, _):
+			f(e);
+		}
+	}
+	
+	public static function iterBlock( b : CodeBlock, f : CodeValue -> Void ) {
+		for( e in b ) {
+			f(e.e);
+			if( e.v != null ) f(e.v);
+		}
 	}
 	
 	public static function getAllVars( hx : Data ) {

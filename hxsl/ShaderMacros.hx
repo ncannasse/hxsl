@@ -359,7 +359,7 @@ class ShaderMacros {
 					if( saveLength == null )
 						saveLength = macro { }
 					else
-						saveLength = macro if( v == null ) paramLengths[$v{paramIndex}] = null else { var $lname = paramLengths[$v { paramIndex } ] = []; $saveLength; };
+						saveLength = macro { paramLengthsModified = true; if( v == null ) paramLengths[$v { paramIndex } ] = null else { var $lname = paramLengths[$v { paramIndex } ] = []; $saveLength; } };
 					
 					fields.push( {
 						name : "get_" + v.name,

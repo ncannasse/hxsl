@@ -83,6 +83,7 @@ class Compiler {
 					{ p1 : TFloat4, p2 : mat34_t, r : TFloat3 },
 					{ p1 : TFloat3, p2 : mat3_t, r : TFloat3 },
 					{ p1 : TFloat3, p2 : mat4_t, r : TFloat3 }, // only use the 3x4 part of the matrix
+					{ p1 : TFloat3, p2 : mat34_t, r : TFloat3 },
 					{ p1 : mat4, p2 : mat4_t, r : mat4 },
 					{ p1 : mat3, p2 : mat3_t, r : mat3 },
 					{ p1 : mat4_t, p2 : mat4, r : mat4_t },
@@ -526,50 +527,6 @@ class Compiler {
 		case PLocal(v):
 			var v = allocVar(v.n, VTmp, v.t, v.p);
 			return { d : CVar(v), t : v.type, p : e.p };
-		case PSwiz(v, swiz):
-			// special case to restring reading to swiz
-			var v = switch( v.v ) {
-			case PVar(vname):
-				var v = vars.get(vname);
-				if( v == null )
-					error("Unknown variable '" + vname + "'", e.p);
-				{ d : CVar(v, null), t : v.type, p : e.p };
-			default:
-				compileValue(v, isTarget);
-			}
-			// check swizzling according to value type
-			var count = switch( v.t ) {
-			case TMatrix(_), TTexture(_), TArray(_): 0;
-			default: Tools.floatSize(v.t);
-			}
-			// allow all components access on input and varying values only
-			switch( v.d ) {
-			case CVar(v, s), CField({ d : CVar(v,s) },_):
-				if( s == null && count > 0 && (v.kind == VInput || v.kind == VVar) ) count = 4;
-			default:
-			}
-			// check that swizzling is correct
-			for( s in swiz )
-				if( Type.enumIndex(s) >= count )
-					error("Invalid swizzling on " + Tools.typeStr(v.t), e.p);
-			// build swizzling
-			switch( v.d ) {
-			case CVar(v, swiz2):
-				var ns;
-				if( swiz2 == null ) {
-					if( !isTarget )
-						checkReadVar(v, swiz, e.p, isCond);
-					ns = swiz;
-				} else {
-					// combine swizzlings
-					ns = [];
-					for( s in swiz )
-						ns.push(swiz2[Type.enumIndex(s)]);
-				}
-				return { d : CVar(v, ns), t : Tools.makeFloat(swiz.length), p : e.p };
-			default:
-				return { d : CSwiz(v, swiz), t : Tools.makeFloat(swiz.length), p : e.p };
-			}
 		case POp(op, e1, e2):
 			return makeOp(op, e1, e2, e.p, isCond);
 		case PUnop(op, e1):
@@ -592,6 +549,8 @@ class Compiler {
 					case TWrap, TClamp: PWrap;
 					case TFilterLinear, TFilterNearest: PFilter;
 					case TSingle: single = true; PSingle;
+					case TTypeRgba, TTypeDxt1, TTypeDxt5: PType;
+					case TIgnoreSampler: PIgnoreSampler;
 					case TLodBias(_): PLodBias;
 					}
 					tflags.push( { f : CTFlag(fl), p : f.p } );
@@ -599,8 +558,8 @@ class Compiler {
 					var v = compileValue(v, false, true);
 					param = p;
 					var t = switch( p ) {
-					case PLodBias: TFloat;
-					case PMipMap, PSingle, PWrap, PFilter: TBool;
+					case PLodBias, PType: TFloat;
+					case PMipMap, PSingle, PWrap, PFilter, PIgnoreSampler: TBool;
 					}
 					unify(v.t, t, v.p);
 					tflags.push( { f : CTParam(p, v), p : f.p } );
@@ -702,11 +661,61 @@ class Compiler {
 		case PField(e1, f):
 			var e1 = compileValue(e1, isTarget, isCond);
 			switch( e1.t ) {
+			case TMatrix(r, c, t):
+				switch( f ) {
+				case "m33" if( r >= 3 && c >= 3):
+					return { d : e1.d, t : TMatrix(3, 3, t), p : e.p };
+				default:
+				}
+			case TTexture(_), TArray(_):
+				// no swizzling
 			case TObject(fields):
 				for( fv in fields )
 					if( fv.name == f )
 						return { d : CField(e1, f), t : fv.t, p : e.p };
 			default:
+				var swiz = [];
+				var chars = "xrygzbwa";
+				for( i in 0...f.length )
+					switch( chars.indexOf(f.charAt(i)) ) {
+					case 0,1: swiz.push(X);
+					case 2,3: swiz.push(Y);
+					case 4,5: swiz.push(Z);
+					case 6,7: swiz.push(W);
+					default: swiz = null; break;
+					}
+				if( swiz != null ) {
+					var v = e1;
+					var count = Tools.floatSize(v.t);
+					// allow all components access on input and varying values only
+					switch( v.d ) {
+					case CVar(v, s), CField({ d : CVar(v,s) },_):
+						if( s == null && count > 0 && (v.kind == VInput || v.kind == VVar) ) count = 4;
+					default:
+					}
+					// check that swizzling is correct
+					for( s in swiz )
+						if( Type.enumIndex(s) >= count )
+							error("Invalid swizzling on " + Tools.typeStr(v.t), e.p);
+					// build swizzling
+					switch( v.d ) {
+					case CVar(v, swiz2):
+						var ns;
+						if( swiz2 == null ) {
+							if( !isTarget )
+								checkReadVar(v, swiz, e.p, isCond);
+							ns = swiz;
+						} else {
+							// combine swizzlings
+							ns = [];
+							for( s in swiz )
+								ns.push(swiz2[Type.enumIndex(s)]);
+						}
+						return { d : CVar(v, ns), t : Tools.makeFloat(swiz.length), p : e.p };
+					default:
+						return { d : CSwiz(v, swiz), t : Tools.makeFloat(swiz.length), p : e.p };
+					}
+				}
 			}
 			return error(Tools.typeStr(e1.t) + " has no field '" + f + "'", e.p);
 		case PIf(_), PFor(_):
@@ -721,10 +730,11 @@ class Compiler {
 			switch( t2 ) {
 			case TMatrix(r2, c2, t2):
 				if( r != r2 || c != c2 ) return false;
-				if( t1.t == null ) {
-					if( t2.t == null ) t2.t = false;
-					t1.t = t2.t;
-					return true;
+				if( t1.t != t2.t ) {
+					if( t1.t == null )
+						t1.t = t2.t;
+					else if( t2.t == null )
+						t2.t = t1.t;
 				}
 				return( t1.t == t2.t );
 			default:
@@ -747,10 +757,10 @@ class Compiler {
 		if( !tryUnify(t1, t2) ) {
 			// if we only have the transpose flag different, let's print a nice error message
 			switch(t1) {
-			case TMatrix(r, c, _):
+			case TMatrix(r, c, t):
 				switch( t2 ) {
-				case TMatrix(r2, c2, t):
-					if( r == r2 && c == c2 && t.t != null ) {
+				case TMatrix(r2, c2, t2):
+					if( r == r2 && c == c2 && t2.t != null ) {
 						if( t.t )
 							error("Matrix is transposed by another operation", p);
 						else
@@ -816,6 +826,13 @@ class Compiler {
 			error("Only constants can be compared to null", e1.p);
 		}
 
+		// special case for matrix multiply
+		switch( [op, e1.t, e2.t] ) {
+		case [CMul, TFloat4, TMatrix(4, 4, { t : false } )]:
+			error("The right matrix must be transposed, please type explicitely as M44T", e2.p);
+		default:
+		}
+		
 		// we have an error, so let's find the most appropriate override
 		// in order to print the most meaningful error message
 		if( first == null )
