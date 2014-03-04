@@ -377,7 +377,7 @@ class Shader {
 			var y = a[i];
 			if( x != y ) {
 				inline function toArray(x) : Array<Dynamic> {
-					#if (haxe_ver >= 3.01)
+					#if (haxe_ver >= 3.1)
 					return Std.instance(x,Array);
 					#elseif flash
 					return flash.Lib.as(x,Array);
