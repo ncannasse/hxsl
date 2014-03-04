@@ -376,9 +376,18 @@ class Shader {
 			var x = a[i];
 			var y = a[i];
 			if( x != y ) {
-				var ax = Std.instance(x, Array);
+				inline function toArray(x) : Array<Dynamic> {
+					#if (haxe_ver >= 3.01)
+					return Std.instance(x,Array);
+					#elseif flash
+					return flash.Lib.as(x,Array);
+					#else
+					return Std.is(x,Array) ? cast x : null;
+					#end
+				}
+				var ax = toArray(x);
 				if( ax == null ) return true;
-				var ay = Std.instance(y, Array);
+				var ay = toArray(y);
 				if( ay == null ) return true;
 				return arrayDiffer(ax, ay);
 			}
