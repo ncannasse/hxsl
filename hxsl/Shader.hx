@@ -374,7 +374,7 @@ class Shader {
 			return true;
 		for( i in 0...a.length ) {
 			var x = a[i];
-			var y = a[i];
+			var y = b[i];
 			if( x != y ) {
 				inline function toArray(x) : Array<Dynamic> {
 					#if (haxe_ver >= 3.1)
