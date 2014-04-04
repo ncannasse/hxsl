@@ -373,14 +373,14 @@ class Shader {
 		if( a.length != b.length )
 			return true;
 		for( i in 0...a.length ) {
-			var x = a[i];
-			var y = b[i];
+			var x : Dynamic = a[i];
+			var y : Dynamic = b[i];
 			if( x != y ) {
 				inline function toArray(x) : Array<Dynamic> {
-					#if (haxe_ver >= 3.1)
-					return Std.instance(x,Array);
-					#elseif flash
+					#if flash
 					return flash.Lib.as(x,Array);
+					#elseif (haxe_ver >= 3.1)
+					return Std.instance(x,Array);
 					#else
 					return Std.is(x,Array) ? cast x : null;
 					#end
