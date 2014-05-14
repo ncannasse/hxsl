@@ -33,7 +33,7 @@ class ShaderInstance {
 
 	public var bits : Int;
 	public var lengths : Array<Array<Int>>;
-	
+
 	public var program : flash.display3D.Program3D;
 
 	public var bufferFormat : Int;
@@ -49,23 +49,23 @@ class ShaderInstance {
 	public var fragmentMap : Vector<Int>;
 	public var textureMap : Vector<Int>;
 	public var texHasConfig : Vector<Bool>;
-	
+
 	public var vertexBytes : haxe.io.Bytes;
 	public var fragmentBytes : haxe.io.Bytes;
-	
+
 	public var varsChanged : Bool;
-	
+
 	public function new() {
 		curShaderId = -1;
 	}
-	
+
 	public function dispose() {
 		if( program != null ) {
 			program.dispose();
 			program = null;
 		}
 	}
-	
+
 }
 
 /**
@@ -73,7 +73,7 @@ class ShaderInstance {
 	It stores all the ShaderInstance depending on applied parameters
 **/
 class ShaderGlobals {
-	
+
 	public var data : hxsl.Data;
 	public var texSize : Int;
 	public var hasParamVector : Bool;
@@ -85,9 +85,9 @@ class ShaderGlobals {
 	var constCount : Int;
 	var instances : Map<String,ShaderInstance>;
 	var hparams : Map<Int,hxsl.Data.Variable>;
-	
+
 	static var ALL = new Array<ShaderGlobals>();
-	
+
 	public function new( hxStr : String ) {
 		this.data = hxsl.Unserialize.unserialize(hxStr);
 
@@ -101,7 +101,7 @@ class ShaderGlobals {
 					checkSubType(f.t);
 			}
 		}
-		
+
 		function checkType(t:Data.VarType) {
 			switch( t ) {
 			case TNull, TFloat, TBool, TInt, TTexture(_):
@@ -129,14 +129,14 @@ class ShaderGlobals {
 				hparams.set(v.id, v);
 			default:
 			}
-		
+
 		texHasConfig = new Vector(texSize);
 		Tools.iterBlock(data.fragment.exprs, lookupTextureAccess);
-		
+
 		instances = new Map();
 		ALL.push(this);
 	}
-	
+
 	function lookupTextureAccess( v : CodeValue ) {
 		switch( v.d ) {
 		case CTex(v, _, mode):
@@ -165,17 +165,17 @@ class ShaderGlobals {
 		}
 		Tools.iter(v, lookupTextureAccess);
 	}
-	
-	
-	
+
+
+
 	function build( code : hxsl.Data.Code ) {
-			
+
 		// init map
 		var nregs = 0;
 		var map = new Vector(constCount);
 		for( i in 0...constCount )
 			map[i] = -1;
-			
+
 		for( v in code.args ) {
 			var realV = hparams.get(v.id);
 			if( v == null ) throw "assert " + v.name;
@@ -183,7 +183,7 @@ class ShaderGlobals {
 			map[realV.index] = v.index * 4;
 			nregs += Tools.regSize(v.type);
 		}
-		
+
 		// add consts
 		var pos = nregs * 4;
 		nregs += code.consts.length;
@@ -194,12 +194,12 @@ class ShaderGlobals {
 			for( i in c.length...4 )
 				consts[pos++] = 1.;
 		}
-		
+
 		var maxRegs = 128;
 		if( nregs > maxRegs )
 			throw "Shader has "+nregs+" parameters (max "+maxRegs+" allowed)";
-		
-		var agal = new hxsl.AgalCompiler().compile(code);
+
+		var agal = new hxsl.AgalCompiler().compile(code,#if flash14 2 #else 1 #end);
 		var o = new haxe.io.BytesOutput();
 		new format.agal.Writer(o).write(agal);
 		return { bytes : o.getBytes(), consts : consts, map : map };
@@ -234,28 +234,28 @@ class ShaderGlobals {
 			}
 		return r.compile(data, params);
 	}
-	
+
 	public function getInstance( bits : Int, lengths : Array<Array<Int>> ) {
 		var signature = bits + ":" + lengths;
 		var i = instances.get(signature);
 		if( i != null )
 			return i;
 		var data2 = compileShader(bits, lengths);
-		
+
 		i = new ShaderInstance();
 		i.bits = bits;
 		i.lengths = lengths == null ? null : lengths.copy();
-		
+
 		var v = build(data2.vertex);
 		i.vertexBytes = v.bytes;
 		i.vertexMap = v.map;
 		i.vertexVars = v.consts;
-		
+
 		var f = build(data2.fragment);
 		i.fragmentBytes = f.bytes;
 		i.fragmentMap = f.map;
 		i.fragmentVars = f.consts;
-				
+
 		var tmap = new Array();
 		for( v in data2.vertex.args.concat(data2.fragment.args) )
 			if( v.kind == VTexture ) {
@@ -265,7 +265,7 @@ class ShaderGlobals {
 		i.textureMap = Vector.fromArrayCopy(tmap);
 		i.textures = new Vector(i.textureMap.length);
 		i.texHasConfig = texHasConfig;
-		
+
 		i.bufferFormat = 0;
 		i.bufferNames = [];
 		i.stride = 0;
@@ -300,10 +300,10 @@ class ShaderGlobals {
 			}
 
 		instances.set(signature, i);
-		
+
 		return i;
 	}
-	
+
 	public static function disposeAll( andCleanCache = false ) {
 		for( g in ALL ) {
 			for( i in g.instances ) {
@@ -316,7 +316,7 @@ class ShaderGlobals {
 				g.instances = new Map();
 		}
 	}
-	
+
 }
 
 
@@ -324,7 +324,7 @@ class ShaderGlobals {
 class Shader {
 
 	static var ID = 0;
-	
+
 	var shaderId : Int;
 	var globals : ShaderGlobals;
 	var modified : Bool;
@@ -336,7 +336,7 @@ class Shader {
 	var paramObjects : Array<Dynamic>;
 	var allTextures : Array<ShaderTypes.Texture>;
 	var instance : ShaderInstance;
-	
+
 	function new() {
 		var c : { HXSL : String, GLOBALS : ShaderGlobals } = cast Type.getClass(this);
 		globals = c.GLOBALS;
@@ -354,13 +354,13 @@ class Shader {
 		}
 		shaderId = ID++;
 	}
-	
+
 	inline function makeMatrix() {
 		var m = new ShaderTypes.Matrix();
 		#if h3d m.identity(); #end
 		return m;
 	}
-	
+
 	inline function makeVector() {
 		return new ShaderTypes.Vector();
 	}
@@ -394,7 +394,7 @@ class Shader {
 		}
 		return false;
 	}
-	
+
 	public function getInstance() : ShaderInstance {
 		if( instance == null || instance.bits != paramBits || (paramLengthsModified && instance.lengths != null && arrayDiffer(instance.lengths,paramLengths)) ) {
 			paramLengthsModified = false;
@@ -413,7 +413,7 @@ class Shader {
 		if( !bytecode )
 			return hxsl.Debug.dataStr(data);
 		function getCode(c) {
-			var agal = new hxsl.AgalCompiler().compile(c);
+			var agal = new hxsl.AgalCompiler().compile(c,#if flash14 2 #else 1 #end);
 			var lines = [];
 			for( c in agal.code )
 				lines.push("\t"+format.agal.Tools.opStr(c));
@@ -422,10 +422,10 @@ class Shader {
 		return "vertex:\n" + getCode(data.vertex) + "\nfragment:\n" + getCode(data.fragment);
 	}
 	#end
-	
-	
+
+
 	#if !h3d
-	
+
 	public function bind( ctx : flash.display3D.Context3D, buffer : flash.display3D.VertexBuffer3D ) {
 		var i = getInstance();
 		if( i.program == null ) {
@@ -457,7 +457,7 @@ class Shader {
 			bits >>= 3;
 		}
 	}
-	
+
 	public function unbind( ctx : flash.display3D.Context3D ) {
 		var i = instance;
 		if( i == null )
@@ -473,9 +473,9 @@ class Shader {
 			bits >>= 3;
 		}
 	}
-	
+
 	#end
-	
+
 	function updateParams() {
 		// copy vars from our local shader to the instance
 		updateVertexParams(instance.vertexVars, instance.vertexMap);
@@ -485,13 +485,13 @@ class Shader {
 		instance.curShaderId = shaderId;
 		instance.varsChanged = true;
 	}
-	
+
 	function updateVertexParams( params : Vector<Float>, map : Vector<Int> ) {
 	}
 
 	function updateFragmentParams( params : Vector<Float>, map : Vector<Int> ) {
 	}
-	
+
 	inline function saveFloats( params : Vector<Float>, index : Int, v : ShaderTypes.Vector, n : Int ) {
 		if( index >= 0 ) {
 			params[index] = v.x;
@@ -500,7 +500,7 @@ class Shader {
 			if( n > 3 ) params[index + 3] = v.w;
 		}
 	}
-	
+
 	inline function saveInt( params : Vector<Float>, index : Int, v : Int ) {
 		if( index >= 0 ) {
 			params[index] = ((v >> 16) & 0xFF) / 255;
@@ -509,7 +509,7 @@ class Shader {
 			params[index + 3] = (v >>> 24) / 255;
 		}
 	}
-	
+
 	inline function saveFloat( params : Vector<Float>, index : Int, v : Float ) {
 		if( index >= 0 ) params[index] = v;
 	}
@@ -521,7 +521,7 @@ class Shader {
 			if( c > 1 ) params[index++] = m._12;
 			if( c > 2 ) params[index++] = m._13;
 			if( c > 3 ) params[index++] = m._14;
-			
+
 			if( r > 1 ) {
 				params[index++] = m._21;
 				if( c > 1 ) params[index++] = m._22;
@@ -548,7 +548,7 @@ class Shader {
 			if( c > 1 ) params[index++] = m[1];
 			if( c > 2 ) params[index++] = m[2];
 			if( c > 3 ) params[index++] = m[3];
-			
+
 			if( r > 1 ) {
 				params[index++] = m[4];
 				if( c > 1 ) params[index++] = m[5];
@@ -580,7 +580,7 @@ class Shader {
 			if( c > 1 ) params[index++] = m._21;
 			if( c > 2 ) params[index++] = m._31;
 			if( c > 3 ) params[index++] = m._41;
-			
+
 			if( r > 1 ) {
 				params[index++] = m._12;
 				if( c > 1 ) params[index++] = m._22;
@@ -607,7 +607,7 @@ class Shader {
 			if( c > 1 ) params[index++] = m[4];
 			if( c > 2 ) params[index++] = m[8];
 			if( c > 3 ) params[index++] = m[12];
-			
+
 			if( r > 1 ) {
 				params[index++] = m[1];
 				if( c > 1 ) params[index++] = m[5];
@@ -635,13 +635,13 @@ class Shader {
 	inline function setParamBit( n : Int, v : Bool ) {
 		if( v ) paramBits |= 1 << n else paramBits &= ~(1 << n);
 	}
-	
+
 	public function rebuildVars() {
 		modified = true;
 	}
-	
+
 	public function toString() {
 		return Type.getClassName(Type.getClass(this));
 	}
-	
+
 }

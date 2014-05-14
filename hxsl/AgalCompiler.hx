@@ -117,7 +117,7 @@ class AgalCompiler {
 		return b;
 	}
 
-	public function compile( c : Code ) : Data {
+	public function compile( c : Code, version ) : Data {
 		code = [];
 		tempCount = c.tempSize;
 		vertex = c.vertex;
@@ -176,6 +176,7 @@ class AgalCompiler {
 		}
 
 		return {
+			version : version,
 			fragmentShader : !c.vertex,
 			code : code,
 		};
@@ -311,7 +312,7 @@ class AgalCompiler {
 						if( s == null ) s = [X, Y, Z, W];
 						var ss = v.swiz;
 						if( ss == null ) ss = [X, Y, Z, W];
-						
+
 						for ( i in 0...s.length ) {
 							var si = Type.enumIndex(s[i]);
 							t.assignedTo[si] = startRegister;
@@ -366,9 +367,9 @@ class AgalCompiler {
 				regLive(r, write);
 				return;
 			}
-			
+
 			if( minPos < 0 ) throw "assert";
-			
+
 			for( p in minPos+1...codePos ) {
 				var k = t.liveBits[p];
 				if( k == null ) k = 0;
@@ -694,6 +695,7 @@ class AgalCompiler {
 			case CFrac: OFrc;
 			case CNorm: ONrm;
 			case CKill: function(dst, v) return OKil(v);
+			case CSetDepth: function(dst, v) return OMov( { t : RDepth, index : 0, swiz : [X], access : null }, v);
 			case CInt,CTrans: throw "assert";
 			})(dst, v));
 		case CTex(v, acc, flags):

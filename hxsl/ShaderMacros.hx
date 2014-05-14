@@ -44,7 +44,7 @@ class ShaderMacros {
 		case TObject(fields): TAnonymous([for( f in fields ) { name : f.name, pos : p, kind : FVar(realType(f.t, p)), access : [], meta : [], doc :null }]);
 		};
 	}
-	
+
 	static function isMutable( t : VarType ) {
 		return switch( t ) {
 		case TNull,TFloat, TBool, TInt, TTexture(_): false;
@@ -62,7 +62,7 @@ class ShaderMacros {
 			return eindex;
 		}
 	}
-	
+
 	static function saveType( t : VarType, eindex : Expr, evar : Expr, pos, rec = 0 ) {
 		var args = [{ expr : EConst(CIdent("_params")), pos : pos }, eindex, evar];
 		var name = switch( t ) {
@@ -84,7 +84,7 @@ class ShaderMacros {
 			var ek = { expr : EConst(CIdent(vk)), pos : pos };
 			var eit = size == 0 ? evar : macro 0...($v{size});
 			var save = saveType(t, eindex, ek, pos, rec + 1);
-			
+
 			switch( t ) {
 			case TArray(_, 0), TObject(_):
 			default:
@@ -93,7 +93,7 @@ class ShaderMacros {
 					$eindex += ($v{Tools.regSize(t) * 4});
 				}
 			}
-			
+
 			if( size == 0 )
 				saves.push(macro for( $ek in $eit ) $save);
 			else
@@ -127,7 +127,7 @@ class ShaderMacros {
 		}
 		return { expr : ECall( { expr : EConst(CIdent("save" + name)), pos : pos }, args), pos : pos };
 	}
-	
+
 	public static function buildShader() {
 		var fields = Context.getBuildFields();
 		var shaderCode = null;
@@ -152,7 +152,7 @@ class ShaderMacros {
 				return null;
 			Context.error("Shader SRC not found", cl.pos);
 		}
-		
+
 		var p = new hxsl.Parser();
 		p.includeFile = function(file) {
 			var f = Context.resolvePath(file);
@@ -164,8 +164,9 @@ class ShaderMacros {
 		c.warn = Context.warning;
 		var data = try c.compile(data) catch( e : hxsl.Data.Error ) haxe.macro.Context.error(e.message, e.pos);
 
+
 		var pos = Context.currentPos();
-		
+
 		// store HXSL data for runtime compilation
 		fields.push({
 			name : "HXSL",
@@ -181,13 +182,13 @@ class ShaderMacros {
 			pos : pos,
 			meta : [ { name:":keep", params : [], pos : pos } ],
 		});
-		
+
 		// create all the variables accessors
 		var allVars = Tools.getAllVars(data);
-		
+
 		var updates = [], constructs = [];
 		var paramCount = 0, texCount = 0, paramVectorCount = 0, paramMatrixCount = 0, paramObjectCount = 0, constCount = 0, lengthsCount = 0;
-		
+
 		for( v in allVars ) {
 			var pos = v.pos;
 			var t = realType(v.type, pos);
@@ -195,7 +196,7 @@ class ShaderMacros {
 			case VConst:
 				var mut = isMutable(v.type);
 				var constIndex = constCount++;
-				
+
 				// creates a real field to store the data
 				fields.push( {
 					name : v.name+"_",
@@ -213,7 +214,7 @@ class ShaderMacros {
 				});
 
 				var evar = { expr : EConst(CIdent(v.name + "_")), pos : pos };
-				
+
 				var expr = if( !mut ) macro return $evar else {
 					var args = [];
 					var allocName = switch( v.type ) {
@@ -258,15 +259,15 @@ class ShaderMacros {
 				var mapIndex = { expr : EArray( { expr : EConst(CIdent("_map")), pos : pos }, { expr : EConst(CInt("" + constIndex)), pos:pos } ), pos : pos };
 				var save = saveType(v.type, mapIndex, evar, pos);
 				updates.push({ v : v, save : save });
-				
+
 			case VParam:
-				
+
 				if( paramCount == 32 )
 					Context.error("Too many runtime parameters for this shader (max=32)", v.pos);
 				var paramIndex = paramCount++;
 				var constIndex = constCount++;
 				var index = { expr : EConst(CInt("" + paramIndex)), pos : pos };
-			
+
 				// virtual field only (storage is indexed)
 				var field : Field = {
 					name : v.name,
@@ -275,7 +276,7 @@ class ShaderMacros {
 					access : [APublic],
 				};
 				fields.push(field);
-				
+
 				switch( v.type ) {
 				case TBool:
 					// simply get set on the param bit
@@ -323,12 +324,12 @@ class ShaderMacros {
 					updates.push( { v : v, save : save } );
 
 				case TObject(_):
-					
+
 					var evar = { expr : EArray( { expr : EConst(CIdent("paramObjects")), pos : pos }, { expr : EConst(CInt("" + paramObjectCount++)), pos : pos } ), pos : pos };
-					
+
 					var lname = "_l" + paramIndex;
 					var lvar = { expr : EConst(CIdent(lname)), pos : pos };
-					
+
 					function loop(v,t) {
 						switch( t ) {
 						case TBool:
@@ -360,7 +361,7 @@ class ShaderMacros {
 						saveLength = macro { }
 					else
 						saveLength = macro { paramLengthsModified = true; if( v == null ) paramLengths[$v { paramIndex } ] = null else { var $lname = paramLengths[$v { paramIndex } ] = []; $saveLength; } };
-					
+
 					fields.push( {
 						name : "get_" + v.name,
 						kind : FFun({ ret : t, params : [], args : [], expr : macro { var tmp = $evar; if( tmp != null ) modified = true; return tmp; } }),
@@ -384,11 +385,11 @@ class ShaderMacros {
 						pos : pos,
 						access : [AInline],
 					});
-					
+
 					var mapIndex = { expr : EArray( { expr : EConst(CIdent("_map")), pos : pos }, { expr : EConst(CInt("" + constIndex)), pos:pos } ), pos : pos };
 					var save = saveType(v.type, mapIndex, evar, pos);
 					updates.push( { v : v, save : save } );
-					
+
 				default:
 					var evar = null;
 					switch( v.type ) {
@@ -427,17 +428,17 @@ class ShaderMacros {
 					var save = saveType(v.type, mapIndex, evar, pos);
 					updates.push( { v : v, save : save } );
 				}
-				
+
 			case VTexture:
 				var tid = { expr : EConst(CInt("" + texCount++)), pos : pos };
-				
+
 				fields.push( {
 					name : v.name,
 					kind : FProp("get", "set", t),
 					pos : pos,
 					access : [APublic],
 				});
-				
+
 				fields.push({
 					name : "get_" + v.name,
 					kind : FFun( {
@@ -461,7 +462,7 @@ class ShaderMacros {
 					pos : v.pos,
 					access : [AInline],
 				});
-			
+
 			case VInput, VVar, VOut:
 				// skip
 			default:
@@ -469,7 +470,7 @@ class ShaderMacros {
 				throw "assert";
 			}
 		}
-		
+
 		// add constructor initializations
 		var newFound = false;
 		for( f in fields )
@@ -503,7 +504,7 @@ class ShaderMacros {
 				pos : pos,
 			});
 		}
-		
+
 		// add updates
 		var updateVertex = [], updateFragment = [];
 		for( u in updates )
@@ -535,9 +536,9 @@ class ShaderMacros {
 				access : [AOverride],
 				pos : pos,
 			});
-			
+
 		return fields;
 	}
-	
+
 }
 #end

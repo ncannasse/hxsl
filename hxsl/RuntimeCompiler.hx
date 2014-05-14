@@ -47,13 +47,13 @@ private typedef VarProps = {
 	- adding extra padding to ensure platform compat
 **/
 class RuntimeCompiler {
-	
+
 	var varProps : Map<Int,VarProps>;
 	var usedVars : Array<Variable>;
 	var constVars : Array<Variable>;
 	var objectVars : Map<Int,{ v : Variable, fields : Map<String,Variable> }>;
 	var varId : Int;
-	
+
 	// force replace of variables by their provided value
 	var isCond : Bool;
 	// do not force constants to be replaced by variables
@@ -64,20 +64,20 @@ class RuntimeCompiler {
 	public static var DEFAULT_CONFIG = {
 		padWrites : true,
 	};
-	
+
 	public var config : { padWrites : Bool };
-	
+
 	public function new() {
 		varId = 0;
 		config = DEFAULT_CONFIG;
 	}
-	
+
 	function error( msg : String, pos : Position ) : Dynamic {
 		if( pos == null ) pos = defPos;
 		throw new Error(msg, pos);
 		return null;
 	}
-	
+
 	function props( v : Variable ) {
 		var p = varProps.get(v.id);
 		if( p == null ) {
@@ -94,7 +94,7 @@ class RuntimeCompiler {
 		}
 		return p;
 	}
-	
+
 	/**
 		Compile the final shader : the params is a mapping of all the variables that will be applied at compilation time.
 		The can be of the following value :
@@ -108,7 +108,7 @@ class RuntimeCompiler {
 		varProps = new Map();
 		objectVars = new Map();
 		defPos = data.vertex.pos;
-			
+
 		var hVars = new Map();
 		for( v in data.globals.concat(data.vertex.args).concat(data.fragment.args) )
 			switch( v.kind ) {
@@ -170,27 +170,27 @@ class RuntimeCompiler {
 				}
 				props(v).value = makeVal(val, v.type);
 			}
-		
+
 		var vertex = compileCode(data.vertex);
 		var vconst = constVars;
 		constVars = [];
-		
+
 		var fragment = compileCode(data.fragment);
 		var fconst = constVars;
 		constVars = [];
-		
+
 		usedVars.sort(sortById);
-		
+
 		indexVars(vertex, vconst);
 		indexVars(fragment, fconst);
-		
+
 		var globals = [];
 		for( v in usedVars ) {
 			if( !props(v).global )
 				continue;
 			globals.push(v);
 		}
-		
+
 		return {
 			globals : globals,
 			vertex : vertex,
@@ -201,7 +201,7 @@ class RuntimeCompiler {
 	function isUnsupportedWriteMask( s : Array<Comp> ) {
 		return s != null && s.length > 1 && (s[0] != X || s[1] != Y || (s.length > 2 && (s[2] != Z || (s.length > 3 && s[3] != W))));
 	}
-	
+
 	function indexVars( c : Code, constVars : Array<Variable> ) {
 		var indexes = [0, 0, 0, 0, 0, 0];
 
@@ -209,7 +209,7 @@ class RuntimeCompiler {
 			v.index = index.i;
 			var p = props(v);
 			if( p.ref != null ) p.ref.index = v.index;
-			
+
 			switch( v.type ) {
 			case TObject(fields):
 				var o = objectVars.get(v.id);
@@ -247,7 +247,7 @@ class RuntimeCompiler {
 				return { v : v, size : size };
 			}
 		}
-		
+
 		for( v in usedVars.copy() ) {
 			var p = props(v);
 			if( p.isVertex == c.vertex ) {
@@ -271,14 +271,14 @@ class RuntimeCompiler {
 			if( v.kind != VConst ) throw "assert";
 			v.index += cdelta;
 		}
-		
+
 		c.tempSize = indexes[Type.enumIndex(VTmp)];
 	}
-	
+
 	function sortById( v1 : Variable, v2 : Variable ) {
 		return v1.id - v2.id;
 	}
-	
+
 	function compileCode( c : Code ) : Code {
 		isCond = false;
 		isConst = false;
@@ -295,7 +295,7 @@ class RuntimeCompiler {
 		checkVars();
 		return cur;
 	}
-	
+
 	function checkVars() {
 		for( v in usedVars ) {
 			var p = props(v);
@@ -311,7 +311,7 @@ class RuntimeCompiler {
 			}
 		}
 	}
-	
+
 	function isGoodSwiz( s : Array<Comp> ) {
 		if( s == null ) return true;
 		var cur = 0;
@@ -320,7 +320,7 @@ class RuntimeCompiler {
 				return false;
 		return true;
 	}
-	
+
 	function padWrite( v : Variable ) {
 		if( !config.padWrites )
 			return;
@@ -373,11 +373,11 @@ class RuntimeCompiler {
 		var c = allocConst(ones, v.pos);
 		addAssign({ d : CVar(v, missing), t : Tools.makeFloat(missing.length), p : v.pos },c, v.pos);
 	}
-	
+
 	function addAssign( v, e, p ) {
 		cur.exprs.push( { v : v, e : e } );
 	}
-	
+
 	function allocVar(name, k, t, p) {
 		var id = -(varId + 1);
 		varId++;
@@ -391,21 +391,21 @@ class RuntimeCompiler {
 		};
 		return v;
 	}
-	
+
 	function makeConst(index:Int, swiz, p) {
 		var v = allocVar("$c" + index, VConst, TFloat4, p);
 		constVars.push(v);
 		v.index = index;
 		return { d : CVar(v, swiz), t : Tools.makeFloat(swiz.length), p : p };
 	}
-	
+
 	function mergeSwiz(from:Array<Comp>, to:Array<Comp>) {
 		var out = [];
 		for( s in to )
 			out.push( from[Type.enumIndex(s)] );
 		return out;
 	}
-	
+
 	function allocConst( cvals : Array<Float>, p : Position ) : CodeValue {
 		var swiz = [X, Y, Z, W];
 		var dup = [];
@@ -426,7 +426,7 @@ class RuntimeCompiler {
 				dvals.push(cvals[i]);
 			}
 		}
-		
+
 		// find an already existing constant
 		for( index in 0...cur.consts.length ) {
 			var c = cur.consts[index];
@@ -458,7 +458,7 @@ class RuntimeCompiler {
 		cur.consts.push(dvals);
 		return makeConst(index, mergeSwiz(swiz.splice(0, dvals.length),dup), p);
 	}
-	
+
 	function isTrue( c : Const ) {
 		return switch( c ) {
 		case CNull: false;
@@ -480,7 +480,7 @@ class RuntimeCompiler {
 	function fullBits( t : VarType ) {
 		return (1 << Tools.floatSize(t)) - 1;
 	}
-	
+
 	function compileAssign( v : Null<CodeValue>, e : CodeValue ) {
 		switch( e.d ) {
 		case CIf(cond, eif, eelse):
@@ -549,7 +549,7 @@ class RuntimeCompiler {
 			return;
 		case CUnop(op, _):
 			switch( op ) {
-			case CKill:
+			case CKill, CSetDepth:
 				addAssign(null,compileValue(e), e.p);
 				return;
 			default:
@@ -562,7 +562,7 @@ class RuntimeCompiler {
 		var e = compileValue(e);
 		addAssign(v,e,cur.pos);
 	}
-	
+
 	function compileCond( v : CodeValue ) {
 		var old = isCond, oldC = isConst;
 		isCond = true;
@@ -575,7 +575,7 @@ class RuntimeCompiler {
 		default: throw "assert";
 		}
 	}
-	
+
 	// don't create a const-var
 	function compileConstValue( v : CodeValue ) {
 		return switch( v.d ) {
@@ -587,9 +587,9 @@ class RuntimeCompiler {
 			isConst = old;
 			v;
 		};
-		
+
 	}
-	
+
 	function compileValueForce( v : CodeValue ) {
 		var old = isConst;
 		isConst = false;
@@ -597,7 +597,7 @@ class RuntimeCompiler {
 		isConst = old;
 		return v;
 	}
-	
+
 	function newVar( v : Variable, p : Position ) {
 		if( isCond ) {
 			if( v.kind != VParam )
@@ -623,7 +623,7 @@ class RuntimeCompiler {
 		}
 		return p.newVar;
 	}
-	
+
 	function compare(c1:Const, c2:Const) : Null<Int> {
 		var f1, f2;
 		switch( c1 ) {
@@ -648,11 +648,11 @@ class RuntimeCompiler {
 			throw "assert";
 		}
 	}
-	
+
 	function makeOp(op:CodeOp, e1:CodeValue, e2:CodeValue ) {
 		e1 = compileConstValue(e1);
 		e2 = compileConstValue(e2);
-		
+
 		var c1 = switch( e1.d ) {
 		case CConst(c): c;
 		default: null;
@@ -707,7 +707,7 @@ class RuntimeCompiler {
 		e2 = compileValueForce(e2);
 		return COp(op, e1, e2);
 	}
-	
+
 	function makeUnop( op : CodeUnop, e : CodeValue ) {
 		e = compileConstValue(e);
 		switch( e.d ) {
@@ -716,7 +716,7 @@ class RuntimeCompiler {
 				return CConst(CFloat(f(floatValue(c))));
 			}
 			switch( op ) {
-			case CNorm, CTrans, CKill:
+			case CNorm, CTrans, CKill, CSetDepth:
 			case CInt: return const(function(x) return Std.int(x));
 			case CFrac: return const(function(x) return x % 1.);
 			case CExp: return const(Math.exp);
@@ -738,7 +738,7 @@ class RuntimeCompiler {
 		e = compileValueForce(e);
 		return CUnop(op, e);
 	}
-	
+
 	function compileValue( e : CodeValue, isTarget = false ) : CodeValue {
 		var d = switch( e.d ) {
 		case CConst(_):
@@ -905,7 +905,7 @@ class RuntimeCompiler {
 			}
 		return { d : d, t : e.t, p : e.p };
 	}
-	
+
 	function compileVector(values:Array<CodeValue>, p) {
 		if( values.length == 0 || values.length > 4 )
 			throw "assert";
@@ -953,5 +953,5 @@ class RuntimeCompiler {
 		cur.exprs = old;
 		return sub;
 	}
-	
+
 }
