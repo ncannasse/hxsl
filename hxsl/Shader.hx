@@ -635,4 +635,7 @@ class Shader {
 		return Type.getClassName(Type.getClass(this));
 	}
 	
+	public function hasInstance() {
+		return instance != null;
+	}
 }
