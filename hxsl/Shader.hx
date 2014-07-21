@@ -638,4 +638,9 @@ class Shader {
 	public function hasInstance() {
 		return instance != null;
 	}
+	
+	//only useful for gl compat
+	public inline function invalidate() {
+		
+	}
 }
