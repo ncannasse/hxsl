@@ -17,7 +17,7 @@ class Camera {
 	public var up : Vector;
 	public var target : Vector;
 
-	public function new( fov = 60., zoom = 1., ratio = 1.333333, zNear = 0.02, zFar = 40. ) {
+	public function new( fov = 54.4, zoom = 1., ratio = 1.333333, zNear = 0.02, zFar = 400. ) {
 		this.fov = fov;
 		this.zoom = zoom;
 		this.ratio = ratio;
