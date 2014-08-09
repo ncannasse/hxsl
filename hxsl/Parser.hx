@@ -269,7 +269,7 @@ class Parser {
 			cur.exprs = [];
 			parseExpr(eif);
 			var pif = { v : PBlock(cur.exprs), p : eif.pos };
-			
+
 			var pelse = null;
 			if( eelse != null ) {
 				cur.exprs = [];
@@ -302,6 +302,11 @@ class Parser {
 					if( s == "kill" && params.length == 1 ) {
 						var v = parseValue(params[0]);
 						cur.exprs.push( { v : null, e : { v : PUnop(CKill,v), p : e.pos }, p : e.pos } );
+						return;
+					}
+					if( s == "setDepth" && params.length == 1 ) {
+						var v = parseValue(params[0]);
+						cur.exprs.push( { v : null, e : { v : PUnop(CSetDepth,v), p : e.pos }, p : e.pos } );
 						return;
 					}
 				default:

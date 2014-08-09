@@ -132,6 +132,7 @@ enum CodeUnop {
 	CNorm;
 	CKill;
 	CTrans;
+	CSetDepth;
 	// Internal usage only
 	CNot;
 }
@@ -288,8 +289,8 @@ class Tools {
 			return Std.string(t).substr(1);
 		}
 	}
-	
-	
+
+
 	public static function regSize( t : VarType ) {
 		return switch( t ) {
 		case TMatrix(w, h, t):
@@ -338,7 +339,7 @@ class Tools {
 			default: throw "assert";
 		};
 	}
-	
+
 	public static function iter( v : CodeValue, f : CodeValue -> Void ) {
 		switch( v.d ) {
 		case CVar(_), CConst(_):
@@ -382,14 +383,14 @@ class Tools {
 			f(e);
 		}
 	}
-	
+
 	public static function iterBlock( b : CodeBlock, f : CodeValue -> Void ) {
 		for( e in b ) {
 			f(e.e);
 			if( e.v != null ) f(e.v);
 		}
 	}
-	
+
 	public static function getAllVars( hx : Data ) {
 		return hx.globals.concat(hx.vertex.args).concat(hx.fragment.args);
 	}

@@ -5,6 +5,6 @@
     "description" : "HxSL : Haxe high level shader library",
 	"contributors" : ["ncannasse"],
 	"dependencies" : { "format" : "" },
-    "version" : "2.0.0",
+    "version" : "2.0.3",
 	"releasenote" : "New version with runtime compiler constants"
 }

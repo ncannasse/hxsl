@@ -100,7 +100,7 @@ class Compiler {
 
 	public dynamic function warn( msg:String, p:Position) {
 	}
-	
+
 	inline function props( v : Variable ) {
 		return varProps[v.id];
 	}
@@ -127,7 +127,7 @@ class Compiler {
 
 		var vertex = compileShader(h.vertex,true);
 		var fragment = compileShader(h.fragment, false);
-		
+
 		return { globals : globals, vertex : vertex, fragment : fragment };
 	}
 
@@ -270,7 +270,7 @@ class Compiler {
 				cur.exprs = oldExprs;
 				for( i in 0...oldWrite.length )
 					varProps[i].write = oldWrite[i];
-				
+
 				vars.remove(vloop.name);
 				cur.exprs.push( { v : null, e : { d : CFor(vloop, it, eloop), t : TNull, p : e.p } } );
 				return;
@@ -279,7 +279,7 @@ class Compiler {
 			var e = compileValue(e);
 			switch( e.d ) {
 			case CUnop(op, _):
-				if( op == CKill ) {
+				if( op == CKill || op == CSetDepth ) {
 					cur.exprs.push( { v : null, e : e } );
 					return;
 				}
@@ -497,7 +497,7 @@ class Compiler {
 		}
 		return null;
 	}
-	
+
 	function compileValue( e : ParsedValue, ?isTarget : Bool, ?isCond ) : CodeValue {
 		switch( e.v ) {
 		case PBlock(_), PReturn(_):
@@ -535,11 +535,11 @@ class Compiler {
 			var v = vars.get(vname);
 			if( v == null ) error("Unknown texture '" + vname + "'", e.p);
 			props(v).read = true;
-			
+
 			var single = false;
 			var tflags = [];
 			var modes = [];
-			
+
 			for( f in flags ) {
 				var param;
 				switch( f.f ) {
@@ -807,7 +807,7 @@ class Compiler {
 						swiz.push(X);
 					return { d : COp(op,{ d : CSwiz(e1, swiz), t : e2.t, p : e1.p }, e2), t : e2.t, p : p };
 				}
-				
+
 		// if we have a null check, infer a VParam
 		if( e1.t == TNull && (op == CEq || op == CNeq) ) {
 			var tmp = e1;
@@ -832,7 +832,7 @@ class Compiler {
 			error("The right matrix must be transposed, please type explicitely as M44T", e2.p);
 		default:
 		}
-		
+
 		// we have an error, so let's find the most appropriate override
 		// in order to print the most meaningful error message
 		if( first == null )
