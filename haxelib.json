@@ -4,7 +4,7 @@
 	"license" : "BSD",
     "description" : "HxSL : Haxe high level shader library",
 	"contributors" : ["ncannasse"],
-	"dependencies" : { "format" : "" },
+	"dependencies" : { "format" : "3.0.5" },
     "version" : "2.0.3",
 	"releasenote" : "New version with runtime compiler constants"
 }
