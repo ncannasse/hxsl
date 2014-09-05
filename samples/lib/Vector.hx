@@ -11,19 +11,19 @@ class Vector {
 		this.z = z;
 	}
 
-	public inline function sub( v : Vector ) {
+	public inline function sub( v : Vector ) : h3d.Vector{
 		return new Vector(x - v.x, y - v.y, z - v.z);
 	}
 
-	public inline function add( v : Vector ) {
+	public inline function add( v : Vector ) : h3d.Vector{
 		return new Vector(x + v.x, y + v.y, z + v.z);
 	}
 
-	public inline function cross( v : Vector ) {
+	public inline function cross( v : Vector ) : h3d.Vector{
 		return new Vector(y * v.z - z * v.y, z * v.x - x * v.z,  x * v.y - y * v.x);
 	}
 
-	public inline function dot( v : Vector ) {
+	public inline function dot( v : Vector ) : h3d.Vector{
 		return x * v.x + y * v.y + z * v.z;
 	}
 
