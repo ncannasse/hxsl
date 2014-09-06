@@ -117,7 +117,7 @@ class AgalCompiler {
 		return b;
 	}
 
-	public function compile( c : Code, version ) : Data {
+	public function compile( c : Code, version = 1 ) : Data {
 		code = [];
 		tempCount = c.tempSize;
 		vertex = c.vertex;
@@ -237,11 +237,15 @@ class AgalCompiler {
 			switch( code[i] ) {
 			case OUnused:
 				c.push(OUnused);
+			case OEif:
+				c.push(OEif);
+			case OEls:
+				c.push(OEls);
 			case OKil(r):
 				c.push(OKil(cp(r)));
 			case OTex(d, v, fl):
 				c.push(OTex(cp(d), cp(v), fl));
-			case OMov(d, v), ORcp(d, v), OFrc(d, v), OSqt(d, v), ORsq(d, v), OLog(d, v), OExp(d, v), ONrm(d, v), OSin(d, v), OCos(d, v), OAbs(d, v), ONeg(d, v), OSat(d, v):
+			case OMov(d, v), ORcp(d, v), OFrc(d, v), OSqt(d, v), ORsq(d, v), OLog(d, v), OExp(d, v), ONrm(d, v), OSin(d, v), OCos(d, v), OAbs(d, v), ONeg(d, v), OSat(d, v), OSgn(d, v), OIfe(d,v), OIfg(d,v), OIne(d,v), OIfl(d,v), ODdx(d,v), ODdy(d,v):
 				c.push(Type.createEnum(Opcode, Type.enumConstructor(code[i]), [cp(d), cp(v)]));
 			case OAdd(d, a, b), OSub(d, a, b), OMul(d, a, b), ODiv(d, a, b), OMin(d, a, b), OMax(d, a, b), OPow(d, a, b), OCrs(d, a, b), ODp3(d, a, b), OSge(d, a, b), OSlt(d, a, b), OSne(d,a,b), OSeq(d,a,b), ODp4(d,a,b), OM33(d, a, b),  OM44(d, a, b), OM34(d,a,b):
 				c.push(Type.createEnum(Opcode, Type.enumConstructor(code[i]), [cp(d), cp(a), cp(b)]));
@@ -262,7 +266,7 @@ class AgalCompiler {
 				// small optimization in order to trigger no-op moves
 				if( v.t == RTemp && d.t == RTemp ) startRegister = v.index;
 				reg(d, true);
-			case OTex(d, v, _), ORcp(d, v), OFrc(d,v),OSqt(d,v), ORsq(d,v), OLog(d,v),OExp(d,v), ONrm(d,v), OSin(d,v), OCos(d,v), OAbs(d,v), ONeg(d,v), OSat(d,v):
+			case OTex(d, v, _), ORcp(d, v), OFrc(d,v),OSqt(d,v), ORsq(d,v), OLog(d,v),OExp(d,v), ONrm(d,v), OSin(d,v), OCos(d,v), OAbs(d,v), ONeg(d,v), OSat(d,v), OSgn(d,v), ODdx(d,v), ODdy(d,v):
 				reg(v,false);
 				reg(d,true);
 			case OAdd(d, a, b), OSub(d, a, b), OMul(d, a, b), ODiv(d, a, b), OMin(d, a, b), OMax(d, a, b),
@@ -272,7 +276,9 @@ class AgalCompiler {
 				reg(d,true);
 			case OM33(d, a, b),  OM44(d, a, b), OM34(d,a,b):
 				if( a.t == RTemp || b.t == RTemp ) throw "assert";
-				reg(d,true);
+				reg(d, true);
+			case OIfe(_), OIfg(_), OIfl(_), OIne(_), OEif, OEls:
+				throw "Conditionals not supported";
 			}
 		}
 	}
