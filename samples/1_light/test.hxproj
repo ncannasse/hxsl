@@ -21,6 +21,7 @@
   <build>
     <option directives="" />
     <option flashStrict="True" />
+    <option noInlineOnDebug="False" />
     <option mainClass="Test" />
     <option enabledebug="False" />
     <option additional="-lib hxsl" />
@@ -39,7 +40,7 @@
   </library>
   <!-- Paths to exclude from the Project Explorer tree -->
   <hiddenPaths>
-    <!-- example: <hidden path="..." /> -->
+    <hidden path="obj" />
   </hiddenPaths>
   <!-- Executed before build -->
   <preBuildCommand />
