@@ -245,7 +245,10 @@ class AgalCompiler {
 				c.push(Type.createEnum(Opcode, Type.enumConstructor(code[i]), [cp(d), cp(v)]));
 			case OAdd(d, a, b), OSub(d, a, b), OMul(d, a, b), ODiv(d, a, b), OMin(d, a, b), OMax(d, a, b), OPow(d, a, b), OCrs(d, a, b), ODp3(d, a, b), OSge(d, a, b), OSlt(d, a, b), OSne(d,a,b), OSeq(d,a,b), ODp4(d,a,b), OM33(d, a, b),  OM44(d, a, b), OM34(d,a,b):
 				c.push(Type.createEnum(Opcode, Type.enumConstructor(code[i]), [cp(d), cp(a), cp(b)]));
+			default: throw "unsupported token by hxsl2";
 			};
+			
+			
 		return c;
 	}
 
@@ -272,7 +275,8 @@ class AgalCompiler {
 				reg(d,true);
 			case OM33(d, a, b),  OM44(d, a, b), OM34(d,a,b):
 				if( a.t == RTemp || b.t == RTemp ) throw "assert";
-				reg(d,true);
+				reg(d, true);
+			default: throw "unsupported token by hxsl2";
 			}
 		}
 	}
