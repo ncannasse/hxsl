@@ -41,6 +41,7 @@ private typedef Temp = {
 	var invAssignedComps : Array<Int>;
 }
 
+@:noDebug
 class AgalCompiler {
 
 	var code : Array<Opcode>;
