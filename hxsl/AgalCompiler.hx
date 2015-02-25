@@ -179,7 +179,7 @@ class AgalCompiler {
 		return {
 			fragmentShader : !c.vertex,
 			code : code,
-			version:1,
+			//version:1,
 		};
 	}
 
