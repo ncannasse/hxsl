@@ -55,8 +55,12 @@ class ShaderInstance {
 
 	public var varsChanged : Bool;
 
+	static var UID;
+	public var id = 0;
+	
 	public function new() {
 		curShaderId = -1;
+		id = UID++;
 	}
 
 	public function dispose() {
@@ -355,6 +359,27 @@ class Shader {
 			paramLengthsModified = true;
 		}
 		shaderId = ID++;
+	}
+	
+	public function clone(?c:Shader) : Shader{
+		var n = (c != null) ? c : Type.createEmptyInstance( cast Type.getClass(this) );
+		n.globals = globals;
+		n.instance = instance;
+		
+		if( globals.hasParamLengths ) {
+			n.paramLengths = paramLengths.map( function(a) return a.copy() );
+			n.paramLengthsModified = paramLengthsModified;
+		}
+		
+		if( globals.texSize > 0 )		n.allTextures = allTextures.copy();
+		if( globals.hasParamVector ) 	n.paramVectors = paramVectors.copy();
+		if( globals.hasParamMatrix ) 	n.paramMatrixes = paramMatrixes.copy();
+		if( globals.hasParamObject )	n.paramObjects = paramObjects.copy();
+			
+		n.paramBits = paramBits;
+		n.modified = modified;
+		n.shaderId = ID++;
+		return n;
 	}
 
 	inline function makeMatrix() {
