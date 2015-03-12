@@ -118,7 +118,7 @@ class AgalCompiler {
 		return b;
 	}
 
-	public function compile( c : Code ) : Data {
+	public function compile( c : Code, version = 1 ) : Data {
 		code = [];
 		tempCount = c.tempSize;
 		vertex = c.vertex;
@@ -177,9 +177,9 @@ class AgalCompiler {
 		}
 
 		return {
+			version : version,
 			fragmentShader : !c.vertex,
 			code : code,
-			//version:1,
 		};
 	}
 
@@ -238,18 +238,20 @@ class AgalCompiler {
 			switch( code[i] ) {
 			case OUnused:
 				c.push(OUnused);
+			case OEif:
+				c.push(OEif);
+			case OEls:
+				c.push(OEls);
 			case OKil(r):
 				c.push(OKil(cp(r)));
 			case OTex(d, v, fl):
 				c.push(OTex(cp(d), cp(v), fl));
-			case OMov(d, v), ORcp(d, v), OFrc(d, v), OSqt(d, v), ORsq(d, v), OLog(d, v), OExp(d, v), ONrm(d, v), OSin(d, v), OCos(d, v), OAbs(d, v), ONeg(d, v), OSat(d, v):
+			case OMov(d, v), ORcp(d, v), OFrc(d, v), OSqt(d, v), ORsq(d, v), OLog(d, v), OExp(d, v), ONrm(d, v), OSin(d, v), OCos(d, v), OAbs(d, v), ONeg(d, v), OSat(d, v), OSgn(d, v), OIfe(d,v), OIfg(d,v), OIne(d,v), OIfl(d,v), ODdx(d,v), ODdy(d,v):
 				c.push(Type.createEnum(Opcode, Type.enumConstructor(code[i]), [cp(d), cp(v)]));
 			case OAdd(d, a, b), OSub(d, a, b), OMul(d, a, b), ODiv(d, a, b), OMin(d, a, b), OMax(d, a, b), OPow(d, a, b), OCrs(d, a, b), ODp3(d, a, b), OSge(d, a, b), OSlt(d, a, b), OSne(d,a,b), OSeq(d,a,b), ODp4(d,a,b), OM33(d, a, b),  OM44(d, a, b), OM34(d,a,b):
 				c.push(Type.createEnum(Opcode, Type.enumConstructor(code[i]), [cp(d), cp(a), cp(b)]));
 			default: throw "unsupported token by hxsl2";
 			};
-			
-			
 		return c;
 	}
 
@@ -266,7 +268,7 @@ class AgalCompiler {
 				// small optimization in order to trigger no-op moves
 				if( v.t == RTemp && d.t == RTemp ) startRegister = v.index;
 				reg(d, true);
-			case OTex(d, v, _), ORcp(d, v), OFrc(d,v),OSqt(d,v), ORsq(d,v), OLog(d,v),OExp(d,v), ONrm(d,v), OSin(d,v), OCos(d,v), OAbs(d,v), ONeg(d,v), OSat(d,v):
+			case OTex(d, v, _), ORcp(d, v), OFrc(d,v),OSqt(d,v), ORsq(d,v), OLog(d,v),OExp(d,v), ONrm(d,v), OSin(d,v), OCos(d,v), OAbs(d,v), ONeg(d,v), OSat(d,v), OSgn(d,v), ODdx(d,v), ODdy(d,v):
 				reg(v,false);
 				reg(d,true);
 			case OAdd(d, a, b), OSub(d, a, b), OMul(d, a, b), ODiv(d, a, b), OMin(d, a, b), OMax(d, a, b),
@@ -277,7 +279,8 @@ class AgalCompiler {
 			case OM33(d, a, b),  OM44(d, a, b), OM34(d,a,b):
 				if( a.t == RTemp || b.t == RTemp ) throw "assert";
 				reg(d, true);
-			default: throw "unsupported token by hxsl2";
+			case OIfe(_), OIfg(_), OIfl(_), OIne(_), OEif, OEls:
+				throw "Conditionals not supported";
 			}
 		}
 	}
@@ -317,7 +320,7 @@ class AgalCompiler {
 						if( s == null ) s = [X, Y, Z, W];
 						var ss = v.swiz;
 						if( ss == null ) ss = [X, Y, Z, W];
-						
+
 						for ( i in 0...s.length ) {
 							var si = Type.enumIndex(s[i]);
 							t.assignedTo[si] = startRegister;
@@ -372,9 +375,9 @@ class AgalCompiler {
 				regLive(r, write);
 				return;
 			}
-			
+
 			if( minPos < 0 ) throw "assert";
-			
+
 			for( p in minPos+1...codePos ) {
 				var k = t.liveBits[p];
 				if( k == null ) k = 0;
@@ -700,6 +703,7 @@ class AgalCompiler {
 			case CFrac: OFrc;
 			case CNorm: ONrm;
 			case CKill: function(dst, v) return OKil(v);
+			case CSetDepth: function(dst, v) return OMov( { t : RDepth, index : 0, swiz : [X], access : null }, v);
 			case CInt,CTrans: throw "assert";
 			})(dst, v));
 		case CTex(v, acc, flags):

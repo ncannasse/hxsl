@@ -81,6 +81,8 @@ class ShaderGlobals {
 	public var hasParamObject : Bool;
 	public var hasParamLengths : Bool;
 
+	public static var AGAL_VERSION = 1;
+
 	var texHasConfig : Vector<Bool>;
 	var constCount : Int;
 	var instances : Map<String,ShaderInstance>;
@@ -199,7 +201,7 @@ class ShaderGlobals {
 		if( nregs > maxRegs )
 			throw "Shader has "+nregs+" parameters (max "+maxRegs+" allowed)";
 
-		var agal = new hxsl.AgalCompiler().compile(code);
+		var agal = new hxsl.AgalCompiler().compile(code,AGAL_VERSION);
 		var o = new haxe.io.BytesOutput();
 		new format.agal.Writer(o).write(agal);
 		return { bytes : o.getBytes(), consts : consts, map : map };
@@ -413,7 +415,7 @@ class Shader {
 		if( !bytecode )
 			return hxsl.Debug.dataStr(data);
 		function getCode(c) {
-			var agal = new hxsl.AgalCompiler().compile(c);
+			var agal = new hxsl.AgalCompiler().compile(c,#if flash14 2 #else 1 #end);
 			var lines = [];
 			for( c in agal.code )
 				lines.push("\t"+format.agal.Tools.opStr(c));
