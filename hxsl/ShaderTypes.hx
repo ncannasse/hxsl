@@ -28,7 +28,8 @@ typedef Texture = h3d.mat.Texture;
 typedef Vector = h3d.Vector;
 typedef Matrix = h3d.Matrix;
 #elseif dotpoint
-typedef Texture = at.dotpoint.dot3d.model.material.Texture;
+//typedef Texture = at.dotpoint.dot3d.model.material.Texture;
+typedef Texture = flash.display3D.textures.TextureBase;
 typedef Vector = at.dotpoint.math.vector.Vector3;
 typedef Matrix = at.dotpoint.math.vector.Matrix44;
 #else

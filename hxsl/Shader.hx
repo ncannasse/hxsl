@@ -25,6 +25,7 @@ package hxsl;
 
 import hxsl.Data;
 import haxe.ds.Vector;
+import hxsl.ShaderTypes;
 
 /**
 	A ShaderInstance is a compiled version of a shader for a given set of parameters.
@@ -40,15 +41,15 @@ class ShaderInstance {
 	public var bufferNames : Array<String>;
 	public var stride : Int;
 
-	public var vertexVars : Vector<Float>;
-	public var fragmentVars : Vector<Float>;
-	public var textures : Vector<ShaderTypes.Texture>;
+	public var vertexVars : haxe.ds.Vector<Float>;
+	public var fragmentVars : haxe.ds.Vector<Float>;
+	public var textures : haxe.ds.Vector<ShaderTypes.Texture>;
 	public var curShaderId : Int;
 
-	public var vertexMap : Vector<Int>;
-	public var fragmentMap : Vector<Int>;
-	public var textureMap : Vector<Int>;
-	public var texHasConfig : Vector<Bool>;
+	public var vertexMap : haxe.ds.Vector<Int>;
+	public var fragmentMap : haxe.ds.Vector<Int>;
+	public var textureMap : haxe.ds.Vector<Int>;
+	public var texHasConfig : haxe.ds.Vector<Bool>;
 	
 	public var vertexBytes : haxe.io.Bytes;
 	public var fragmentBytes : haxe.io.Bytes;
@@ -81,7 +82,7 @@ class ShaderGlobals {
 	public var hasParamObject : Bool;
 	public var hasParamLengths : Bool;
 
-	var texHasConfig : Vector<Bool>;
+	var texHasConfig : haxe.ds.Vector<Bool>;
 	var constCount : Int;
 	var instances : Map<String,ShaderInstance>;
 	var hparams : Map<Int,hxsl.Data.Variable>;
@@ -132,7 +133,7 @@ class ShaderGlobals {
 			default:
 			}
 		
-		texHasConfig = new Vector(texSize);
+		texHasConfig = new haxe.ds.Vector(texSize);
 		Tools.iterBlock(data.fragment.exprs, lookupTextureAccess);
 		
 		instances = new Map();
@@ -174,7 +175,7 @@ class ShaderGlobals {
 			
 		// init map
 		var nregs = 0;
-		var map = new Vector(constCount);
+		var map = new haxe.ds.Vector(constCount);
 		for( i in 0...constCount )
 			map[i] = -1;
 			
@@ -189,7 +190,7 @@ class ShaderGlobals {
 		// add consts
 		var pos = nregs * 4;
 		nregs += code.consts.length;
-		var consts = new Vector(nregs * 4);
+		var consts = new haxe.ds.Vector(nregs * 4);
 		for( c in code.consts ) {
 			for( v in c )
 				consts[pos++] = v;
@@ -264,8 +265,8 @@ class ShaderGlobals {
 				var realV = hparams.get(v.id);
 				tmap.push(realV.index);
 			}
-		i.textureMap = Vector.fromArrayCopy(tmap);
-		i.textures = new Vector(i.textureMap.length);
+		i.textureMap = haxe.ds.Vector.fromArrayCopy(tmap);
+		i.textures = new haxe.ds.Vector(i.textureMap.length);
 		i.texHasConfig = texHasConfig;
 		
 		i.bufferFormat = 0;
@@ -479,13 +480,13 @@ class Shader {
 		instance.varsChanged = true;
 	}
 	
-	function updateVertexParams( params : Vector<Float>, map : Vector<Int> ) {
+	function updateVertexParams( params : haxe.ds.Vector<Float>, map : haxe.ds.Vector<Int> ) {
 	}
 
-	function updateFragmentParams( params : Vector<Float>, map : Vector<Int> ) {
+	function updateFragmentParams( params : haxe.ds.Vector<Float>, map : haxe.ds.Vector<Int> ) {
 	}
 	
-	inline function saveFloats( params : Vector<Float>, index : Int, v : ShaderTypes.Vector, n : Int ) {
+	inline function saveFloats( params : haxe.ds.Vector<Float>, index : Int, v : ShaderTypes.Vector, n : Int ) {
 		if( index >= 0 ) {
 			params[index] = v.x;
 			params[index + 1] = v.y;
@@ -494,7 +495,7 @@ class Shader {
 		}
 	}
 	
-	inline function saveInt( params : Vector<Float>, index : Int, v : Int ) {
+	inline function saveInt( params : haxe.ds.Vector<Float>, index : Int, v : Int ) {
 		if( index >= 0 ) {
 			params[index] = ((v >> 16) & 0xFF) / 255;
 			params[index + 1] = ((v >> 8) & 0xFF) / 255;
@@ -503,11 +504,11 @@ class Shader {
 		}
 	}
 	
-	inline function saveFloat( params : Vector<Float>, index : Int, v : Float ) {
+	inline function saveFloat( params : haxe.ds.Vector<Float>, index : Int, v : Float ) {
 		if( index >= 0 ) params[index] = v;
 	}
 
-	inline function saveMatrix( params : Vector<Float>, index : Int, m : ShaderTypes.Matrix, r : Int, c : Int ) {
+	inline function saveMatrix( params : haxe.ds.Vector<Float>, index : Int, m : ShaderTypes.Matrix, r : Int, c : Int ) {
 		if( index >= 0 ) {
 			#if h3d
 			params[index++] = m._11;
@@ -594,7 +595,7 @@ class Shader {
 	
 	
 	
-	inline function saveMatrixT( params : Vector<Float>, index : Int, m : ShaderTypes.Matrix, r : Int, c : Int ) {
+	inline function saveMatrixT( params : haxe.ds.Vector<Float>, index : Int, m : ShaderTypes.Matrix, r : Int, c : Int ) {
 		if( index >= 0 ) {
 			#if h3d
 			params[index++] = m._11;
