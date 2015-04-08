@@ -538,26 +538,26 @@ class Shader {
 			}
 			#elseif dotpoint
 			params[index++] = m.m11;
-			if( c > 1 ) params[index++] = m.m21;
-			if( c > 2 ) params[index++] = m.m31;
-			if( c > 3 ) params[index++] = m.m41;
+			if( c > 1 ) params[index++] = m.m12;
+			if( c > 2 ) params[index++] = m.m13;
+			if( c > 3 ) params[index++] = m.m14;
 			
 			if( r > 1 ) {
-				params[index++] = m.m12;
+				params[index++] = m.m21;
 				if( c > 1 ) params[index++] = m.m22;
-				if( c > 2 ) params[index++] = m.m32;
-				if( c > 3 ) params[index++] = m.m42;
+				if( c > 2 ) params[index++] = m.m23;
+				if( c > 3 ) params[index++] = m.m24;
 
 				if( r > 2 ) {
-					params[index++] = m.m13;
-					if( c > 1 ) params[index++] = m.m23;
+					params[index++] = m.m32;
+					if( c > 1 ) params[index++] = m.m32;
 					if( c > 2 ) params[index++] = m.m33;
-					if( c > 3 ) params[index++] = m.m43;
+					if( c > 3 ) params[index++] = m.m34;
 
 					if( r > 3 ) {
-						params[index++] = m.m14;
-						if( c > 1 ) params[index++] = m.m24;
-						if( c > 2 ) params[index++] = m.m34;
+						params[index++] = m.m41;
+						if( c > 1 ) params[index++] = m.m42;
+						if( c > 2 ) params[index++] = m.m43;
 						if( c > 3 ) params[index++] = m.m44;
 					}
 				}
@@ -625,26 +625,26 @@ class Shader {
 			}
 			#elseif dotpoint
 			params[index++] = m.m11;
-			if( c > 1 ) params[index++] = m.m12;
-			if( c > 2 ) params[index++] = m.m13;
-			if( c > 3 ) params[index++] = m.m14;
+			if( c > 1 ) params[index++] = m.m21;
+			if( c > 2 ) params[index++] = m.m31;
+			if( c > 3 ) params[index++] = m.m41;
 			
 			if( r > 1 ) {
-				params[index++] = m.m21;
+				params[index++] = m.m12;
 				if( c > 1 ) params[index++] = m.m22;
-				if( c > 2 ) params[index++] = m.m23;
-				if( c > 3 ) params[index++] = m.m24;
+				if( c > 2 ) params[index++] = m.m32;
+				if( c > 3 ) params[index++] = m.m42;
 
 				if( r > 2 ) {
-					params[index++] = m.m31;
-					if( c > 1 ) params[index++] = m.m32;
+					params[index++] = m.m13;
+					if( c > 1 ) params[index++] = m.m23;
 					if( c > 2 ) params[index++] = m.m33;
-					if( c > 3 ) params[index++] = m.m34;
+					if( c > 3 ) params[index++] = m.m43;
 
 					if( r > 3 ) {
-						params[index++] = m.m41;
-						if( c > 1 ) params[index++] = m.m42;
-						if( c > 2 ) params[index++] = m.m43;
+						params[index++] = m.m14;
+						if( c > 1 ) params[index++] = m.m24;
+						if( c > 2 ) params[index++] = m.m34;
 						if( c > 3 ) params[index++] = m.m44;
 					}
 				}
