@@ -205,7 +205,8 @@ class ShaderGlobals {
 		if( nregs > maxRegs )
 			throw "Shader has "+nregs+" parameters (max "+maxRegs+" allowed)";
 
-		var agal = new hxsl.AgalCompiler().compile(code,AGAL_VERSION);
+		var agal = new hxsl.AgalCompiler().compile(code, AGAL_VERSION);
+		
 		var o = new haxe.io.BytesOutput();
 		new format.agal.Writer(o).write(agal);
 		return { bytes : o.getBytes(), consts : consts, map : map };
@@ -422,6 +423,7 @@ class Shader {
 		return false;
 	}
 
+	@:noDebug
 	public function getInstance() : ShaderInstance {
 		if( instance == null || instance.bits != paramBits || (paramLengthsModified && instance.lengths != null && arrayDiffer(instance.lengths,paramLengths)) ) {
 			paramLengthsModified = false;
@@ -440,7 +442,7 @@ class Shader {
 		if( !bytecode )
 			return hxsl.Debug.dataStr(data);
 		function getCode(c) {
-			var agal = new hxsl.AgalCompiler().compile(c,#if flash14 2 #else 1 #end);
+			var agal = new hxsl.AgalCompiler().compile(c,ShaderGlobals.AGAL_VERSION);
 			var lines = [];
 			for( c in agal.code )
 				lines.push("\t"+format.agal.Tools.opStr(c));
@@ -449,7 +451,6 @@ class Shader {
 		return "vertex:\n" + getCode(data.vertex) + "\nfragment:\n" + getCode(data.fragment);
 	}
 	#end
-
 
 	#if !h3d
 
@@ -503,6 +504,7 @@ class Shader {
 
 	#end
 
+	@:noDebug
 	function updateParams() {
 		// copy vars from our local shader to the instance
 		updateVertexParams(instance.vertexVars, instance.vertexMap);

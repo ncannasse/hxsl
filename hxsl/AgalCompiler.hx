@@ -31,6 +31,7 @@ import format.agal.Data;
 import hxsl.Data;
 #end
 
+
 private typedef Temp = {
 	var liveBits : Array<Null<Int>>;
 	var lastWritePos : Array<Int>;
