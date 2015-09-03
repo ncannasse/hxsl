@@ -638,7 +638,7 @@ class AgalOptim {
 				switch( [code[i + 1], code[i + 2]] ) {
 				case [ODp3(d2, a2, b2), ODp3(d3, a3, b3)]:
 					if( same(dst, d2) && same(dst, d3) && same(a, a2) && same(a, a3) && swizBits(a2)&63 == sa && swizBits(a3)&63 == sa && dist(b, b2) == 1 && dist(b, b3) == 2 && swizBits(d2) == 1 && swizBits(d3) == 2 && swizBits(b2)&63 == XYZ && swizBits(b3)&63 == XYZ ) {
-						var dst = Reflect.copy(dst);
+						var dst = dst.clone();
 						dst.swiz = [X, Y, Z];
 						code[i] = OM33(dst, a, noSwiz(b));
 						code[i + 1] = OUnused;
@@ -659,7 +659,7 @@ class AgalOptim {
 									m44 = true;
 							default:
 							}
-						var dst = Reflect.copy(dst);
+						var dst = dst.clone();
 						dst.swiz = m44 ? null : [X,Y,Z];
 						code[i] = (m44?OM44:OM34)(dst, sa == XYZW ? noSwiz(a) : a, noSwiz(b));
 						code[i + 1] = OUnused;

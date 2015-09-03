@@ -515,9 +515,11 @@ class Shader {
 		instance.varsChanged = true;
 	}
 
+	@:noDebug
 	function updateVertexParams( params : Vector<Float>, map : Vector<Int> ) {
 	}
 
+	@:noDebug
 	function updateFragmentParams( params : Vector<Float>, map : Vector<Int> ) {
 	}
 
