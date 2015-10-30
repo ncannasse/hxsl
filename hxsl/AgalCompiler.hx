@@ -63,7 +63,7 @@ class AgalCompiler {
 	function allocTemp( t ) {
 		var index = tempCount;
 		tempCount += Tools.regSize(t);
-		return { t : RTemp, index : index, swiz : initSwiz(t), access : null };
+		return new Reg(RTemp, index, initSwiz(t));
 	}
 
 	function initSwiz( t : VarType ) {
@@ -93,14 +93,14 @@ class AgalCompiler {
 		case VInput: RAttr;
 		case VTexture, VParam: throw "assert";
 		}
-		return { t : t, index : v.index, swiz : swiz, access : null };
+		return new Reg(t, v.index, swiz);
 	}
 
 	function delta( r : Reg, n : Int, ?s) : Reg {
 		if( r.access == null )
-			return { t : r.t, index : r.index + n, swiz : (s == null) ? r.swiz : s, access : null };
+			return new Reg(r.t, r.index + n, (s == null) ? r.swiz : s);
 		var acc = r.access;
-		return { t : r.t, index : r.index, swiz : (s == null) ? r.swiz : s, access : { t : acc.t, comp : acc.comp, offset : acc.offset + n } };
+		return new Reg(r.t, r.index, (s == null) ? r.swiz : s, new RegAccess(acc.t, acc.comp, acc.offset + n));
 	}
 
 	function swizOpt( r : Reg, s ) {
@@ -185,7 +185,7 @@ class AgalCompiler {
 	function compileExpr( e : CodeValue, v : CodeValue ) {
 		if( v == null ) {
 			// assume dest not check
-			compileTo({ t : ROut, index : -1, swiz : null, access : null }, e);
+			compileTo(new Reg(ROut, -1, null), e);
 			return;
 		}
 		var d = switch( v.d ) {
@@ -230,7 +230,7 @@ class AgalCompiler {
 
 	function uniqueReg() {
 		function cp(r:Reg) : Reg {
-			return { t : r.t, index : r.index, swiz : r.swiz, access : r.access == null ? null : { t : r.access.t, offset : r.access.offset, comp : r.access.comp } };
+			return new Reg(r.t, r.index, r.swiz, r.access == null ? null : new RegAccess(r.access.t, r.access.comp,r.access.offset));
 		}
 		var c = [];
 		for( i in 0...code.length )
@@ -497,16 +497,16 @@ class AgalCompiler {
 	}
 
 	function project( dst : Reg, r1 : Reg, r2 : Reg ) {
-		code.push(ODp4( { t : dst.t, index : dst.index, swiz : [X], access : null }, r1, r2));
-		code.push(ODp4( { t : dst.t, index : dst.index, swiz : [Y], access : null }, r1, delta(r2, 1)));
-		code.push(ODp4( { t : dst.t, index : dst.index, swiz : [Z], access : null }, r1, delta(r2, 2)));
-		return ODp4( { t : dst.t, index : dst.index, swiz : [W], access : null }, r1, delta(r2, 3));
+		code.push(ODp4( new Reg(dst.t, dst.index, [X]), r1, r2));
+		code.push(ODp4( new Reg(dst.t, dst.index, [Y]), r1, delta(r2, 1)));
+		code.push(ODp4( new Reg(dst.t, dst.index, [Z]), r1, delta(r2, 2)));
+		return ODp4( new Reg(dst.t, dst.index, [W]), r1, delta(r2, 3));
 	}
 
 	function project3( dst : Reg, r1 : Reg, r2 : Reg ) {
-		code.push(ODp3( { t : dst.t, index : dst.index, swiz : [X], access : null }, r1, r2));
-		code.push(ODp3( { t : dst.t, index : dst.index, swiz : [Y], access : null }, r1, delta(r2, 1)));
-		return ODp3( { t : dst.t, index : dst.index, swiz : [Z], access : null }, r1, delta(r2, 2));
+		code.push(ODp3( new Reg(dst.t, dst.index, [X]), r1, r2));
+		code.push(ODp3( new Reg(dst.t, dst.index, [Y]), r1, delta(r2, 1)));
+		return ODp3( new Reg(dst.t, dst.index, [Z]), r1, delta(r2, 2));
 	}
 
 	function matrix44multiply( rt : VarType, dst : Reg, r1 : Reg, r2 : Reg ) {
@@ -701,7 +701,7 @@ class AgalCompiler {
 			case CFrac: OFrc;
 			case CNorm: ONrm;
 			case CKill: function(dst, v) return OKil(v);
-			case CSetDepth: function(dst, v) return OMov( { t : RDepth, index : 0, swiz : [X], access : null }, v);
+			case CSetDepth: function(dst, v) return OMov( new Reg(RDepth, 0, [X]), v);
 			case CInt,CTrans: throw "assert";
 			})(dst, v));
 		case CTex(v, acc, flags):
@@ -749,13 +749,13 @@ class AgalCompiler {
 		}
 	}
 
-	function compileSrc( e : CodeValue ) {
+	function compileSrc( e : CodeValue ) : Reg {
 		switch( e.d ) {
 		case CVar(v, swiz):
 			return reg(v, swiz);
 		case CSwiz(e, swiz):
 			var v = compileSrc(e);
-			return { t : v.t, swiz : convertSwiz(swiz), index : v.index, access : v.access };
+			return new Reg(v.t, v.index, convertSwiz(swiz), v.access);
 		case COp(_), CTex(_), CUnop(_):
 			var t = allocTemp(e.t);
 			compileTo(t, e);
@@ -763,7 +763,7 @@ class AgalCompiler {
 		case CAccess(v1, e2):
 			var r1 = reg(v1);
 			var r2 = compileSrc(e2);
-			return { t : r2.t, index : r2.index, access : { t : r1.t, comp : r2.swiz[0], offset : r1.index }, swiz : initSwiz(e.t) };
+			return new Reg(r2.t, r2.index, initSwiz(e.t), new RegAccess(r1.t, r2.swiz[0], r1.index));
 		case CSubBlock(el, v):
 			for( e in el )
 				compileExpr(e.e, e.v);
