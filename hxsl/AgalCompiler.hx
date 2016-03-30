@@ -113,7 +113,7 @@ class AgalCompiler {
 			return 15;
 		var b = 0;
 		for( s in s )
-			b |= 1 << Type.enumIndex(s);
+			b |= 1 << s.getIndex();
 		return b;
 	}
 
@@ -295,8 +295,8 @@ class AgalCompiler {
 			// set last-write per-component codepos
 			if( r.access != null ) {
 				// if we have an access, our index is good but our swiz is not
-				t.lastWritePos[Type.enumIndex(r.access.comp)] = codePos;
-				t.assignedTo[Type.enumIndex(r.access.comp)] = null;
+				t.lastWritePos[r.access.comp.getIndex()] = codePos;
+				t.assignedTo[r.access.comp.getIndex()] = null;
 			} else if( r.swiz == null ) {
 				for( i in 0...4 ) {
 					t.lastWritePos[i] = codePos;
@@ -304,8 +304,8 @@ class AgalCompiler {
 				}
 			} else {
 				for( s in r.swiz ) {
-					t.lastWritePos[Type.enumIndex(s)] = codePos;
-					t.assignedTo[Type.enumIndex(s)] = null;
+					t.lastWritePos[s.getIndex()] = codePos;
+					t.assignedTo[s.getIndex()] = null;
 				}
 			}
 			// copy-propagation
@@ -320,7 +320,7 @@ class AgalCompiler {
 						if( ss == null ) ss = [X, Y, Z, W];
 
 						for ( i in 0...s.length ) {
-							var si = Type.enumIndex(s[i]);
+							var si = s[i].getIndex();
 							t.assignedTo[si] = startRegister;
 							t.assignedPos[si] = codePos;
 							t.assignedComps[si] = ss[i];
@@ -341,7 +341,7 @@ class AgalCompiler {
 			var minPos : Null<Int> = null;
 			var mask = 0;
 			for( s in s ) {
-				var bit = Type.enumIndex(s);
+				var bit = s.getIndex();
 				var pos = t.lastWritePos[bit];
 				if( minPos == null || pos < minPos ) minPos = pos;
 				mask |= 1 << bit;
@@ -350,14 +350,14 @@ class AgalCompiler {
 			// copy-propagation
 			var copy=null;
 			for ( c in s ) {
-				var ci = Type.enumIndex(c);
+				var ci = c.getIndex();
 				var from = t.assignedTo[ci];
 				if( from != null && (copy == null || from == copy) ) {
 					copy = from;
 
 					var fromTemp = temps[from];
 					var cc = t.assignedComps[ci];
-					if ( fromTemp.lastWritePos[Type.enumIndex(cc)] < t.assignedPos[ci] ) {
+					if ( fromTemp.lastWritePos[cc.getIndex()] < t.assignedPos[ci] ) {
 						continue;
 					}
 				}
@@ -366,10 +366,10 @@ class AgalCompiler {
 			}
 
 			if( copy != null ) {
-				r.index = t.assignedTo[Type.enumIndex(s[0])];
+				r.index = t.assignedTo[s[0].getIndex()];
 				r.swiz = [];
 				for( c in s )
-					r.swiz.push(t.assignedComps[Type.enumIndex(c)]);
+					r.swiz.push(t.assignedComps[c.getIndex()]);
 				regLive(r, write);
 				return;
 			}
@@ -388,11 +388,11 @@ class AgalCompiler {
 	function changeReg( r : Reg, t : Temp ) {
 		r.index = t.finalRegister;
 		if( r.access != null )
-			r.access.comp = t.assignedComps[Type.enumIndex(r.access.comp)];
+			r.access.comp = t.assignedComps[r.access.comp.getIndex()];
 		else if( r.swiz != null ) {
 			var s = [];
 			for( c in r.swiz )
-				s.push(t.assignedComps[Type.enumIndex(c)]);
+				s.push(t.assignedComps[c.getIndex()]);
 			r.swiz = s;
 		}
 	}
@@ -486,8 +486,8 @@ class AgalCompiler {
 				// if one single component, allocate from the end to keep free first registers
 				var c = ncomps == 1 ? comps.pop() : comps.shift();
 				t.assignedComps[i] = c;
-				t.invAssignedComps[Type.enumIndex(c)] = i;
-				reg[Type.enumIndex(c)] = t;
+				t.invAssignedComps[c.getIndex()] = i;
+				reg[c.getIndex()] = t;
 			}
 		changeReg(r, t);
 		// next assign will most like use another register
