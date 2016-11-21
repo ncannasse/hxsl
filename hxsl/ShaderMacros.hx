@@ -262,7 +262,7 @@ class ShaderMacros {
 
 			case VParam:
 
-				if( paramCount == 32 )
+				if( paramCount >= 32 )
 					Context.error("Too many runtime parameters for this shader (max=32)", v.pos);
 				var paramIndex = paramCount++;
 				var constIndex = constCount++;

@@ -55,8 +55,12 @@ class ShaderInstance {
 
 	public var varsChanged : Bool;
 
+	static var UID;
+	public var id = 0;
+	
 	public function new() {
 		curShaderId = -1;
+		id = UID++;
 	}
 
 	public function dispose() {
@@ -201,7 +205,8 @@ class ShaderGlobals {
 		if( nregs > maxRegs )
 			throw "Shader has "+nregs+" parameters (max "+maxRegs+" allowed)";
 
-		var agal = new hxsl.AgalCompiler().compile(code,AGAL_VERSION);
+		var agal = new hxsl.AgalCompiler().compile(code, AGAL_VERSION);
+		
 		var o = new haxe.io.BytesOutput();
 		new format.agal.Writer(o).write(agal);
 		return { bytes : o.getBytes(), consts : consts, map : map };
@@ -356,6 +361,27 @@ class Shader {
 		}
 		shaderId = ID++;
 	}
+	
+	public function clone(?c:Shader) : Shader{
+		var n = (c != null) ? c : Type.createEmptyInstance( cast Type.getClass(this) );
+		n.globals = globals;
+		n.instance = instance;
+		
+		if( globals.hasParamLengths ) {
+			n.paramLengths = paramLengths.map( function(a) return a.copy() );
+			n.paramLengthsModified = paramLengthsModified;
+		}
+		
+		if( globals.texSize > 0 )		n.allTextures = allTextures.copy();
+		if( globals.hasParamVector ) 	n.paramVectors = paramVectors.copy();
+		if( globals.hasParamMatrix ) 	n.paramMatrixes = paramMatrixes.copy();
+		if( globals.hasParamObject )	n.paramObjects = paramObjects.copy();
+			
+		n.paramBits = paramBits;
+		n.modified = modified;
+		n.shaderId = ID++;
+		return n;
+	}
 
 	inline function makeMatrix() {
 		var m = new ShaderTypes.Matrix();
@@ -397,6 +423,7 @@ class Shader {
 		return false;
 	}
 
+	@:noDebug
 	public function getInstance() : ShaderInstance {
 		if( instance == null || instance.bits != paramBits || (paramLengthsModified && instance.lengths != null && arrayDiffer(instance.lengths,paramLengths)) ) {
 			paramLengthsModified = false;
@@ -415,7 +442,7 @@ class Shader {
 		if( !bytecode )
 			return hxsl.Debug.dataStr(data);
 		function getCode(c) {
-			var agal = new hxsl.AgalCompiler().compile(c,#if flash14 2 #else 1 #end);
+			var agal = new hxsl.AgalCompiler().compile(c,ShaderGlobals.AGAL_VERSION);
 			var lines = [];
 			for( c in agal.code )
 				lines.push("\t"+format.agal.Tools.opStr(c));
@@ -424,7 +451,6 @@ class Shader {
 		return "vertex:\n" + getCode(data.vertex) + "\nfragment:\n" + getCode(data.fragment);
 	}
 	#end
-
 
 	#if !h3d
 
@@ -478,6 +504,7 @@ class Shader {
 
 	#end
 
+	@:noDebug
 	function updateParams() {
 		// copy vars from our local shader to the instance
 		updateVertexParams(instance.vertexVars, instance.vertexMap);
@@ -488,9 +515,11 @@ class Shader {
 		instance.varsChanged = true;
 	}
 
+	@:noDebug
 	function updateVertexParams( params : Vector<Float>, map : Vector<Int> ) {
 	}
 
+	@:noDebug
 	function updateFragmentParams( params : Vector<Float>, map : Vector<Int> ) {
 	}
 
@@ -646,4 +675,13 @@ class Shader {
 		return Type.getClassName(Type.getClass(this));
 	}
 
+	
+	public function hasInstance() {
+		return instance != null;
+	}
+	
+	//only useful for gl compat
+	public inline function invalidate() {
+		
+	}
 }

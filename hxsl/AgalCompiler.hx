@@ -31,6 +31,7 @@ import format.agal.Data;
 import hxsl.Data;
 #end
 
+
 private typedef Temp = {
 	var liveBits : Array<Null<Int>>;
 	var lastWritePos : Array<Int>;
@@ -41,6 +42,7 @@ private typedef Temp = {
 	var invAssignedComps : Array<Int>;
 }
 
+@:noDebug
 class AgalCompiler {
 
 	var code : Array<Opcode>;
@@ -83,7 +85,7 @@ class AgalCompiler {
 		return sz;
 	}
 
-	function reg( v : Variable, ?swiz ) {
+	function reg( v : Variable, ?swiz ) : Reg {
 		var swiz = if( swiz == null ) initSwiz(v.type) else convertSwiz(swiz);
 		var t = switch( v.kind ) {
 		case VConst: RConst;
@@ -96,14 +98,14 @@ class AgalCompiler {
 		return new Reg(t, v.index, swiz);
 	}
 
-	function delta( r : Reg, n : Int, ?s) : Reg {
+	inline function delta( r : Reg, n : Int, ?s) : Reg {
 		if( r.access == null )
 			return new Reg(r.t, r.index + n, (s == null) ? r.swiz : s);
 		var acc = r.access;
 		return new Reg(r.t, r.index, (s == null) ? r.swiz : s, new RegAccess(acc.t, acc.comp, acc.offset + n));
 	}
 
-	function swizOpt( r : Reg, s ) {
+	inline function swizOpt( r : Reg, s ) {
 		if( r.swiz == null ) r.swiz = s;
 		return r;
 	}
@@ -249,6 +251,7 @@ class AgalCompiler {
 				c.push(Type.createEnum(Opcode, Type.enumConstructor(code[i]), [cp(d), cp(v)]));
 			case OAdd(d, a, b), OSub(d, a, b), OMul(d, a, b), ODiv(d, a, b), OMin(d, a, b), OMax(d, a, b), OPow(d, a, b), OCrs(d, a, b), ODp3(d, a, b), OSge(d, a, b), OSlt(d, a, b), OSne(d,a,b), OSeq(d,a,b), ODp4(d,a,b), OM33(d, a, b),  OM44(d, a, b), OM34(d,a,b):
 				c.push(Type.createEnum(Opcode, Type.enumConstructor(code[i]), [cp(d), cp(a), cp(b)]));
+			default: throw "unsupported token by hxsl2";
 			};
 		return c;
 	}
